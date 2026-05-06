@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #050510;
+  --color-foreground: #e0e0f8;
+  --color-brand-cyan: #00f0ff;
+  --color-brand-purple: #b026ff;
+  --color-brand-dark: #0a0a1a;
+  --color-brand-accent: #39ff14;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
+}
+
+.glass-panel {
+  background: rgba(15, 15, 30, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.neon-border-cyan {
+  border: 1px solid var(--color-brand-cyan);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.5), inset 0 0 10px rgba(0, 240, 255, 0.2);
+}
+
+.neon-border-purple {
+  border: 1px solid var(--color-brand-purple);
+  box-shadow: 0 0 10px rgba(176, 38, 255, 0.5), inset 0 0 10px rgba(176, 38, 255, 0.2);
+}
+
+.neon-text-cyan {
+  color: var(--color-brand-cyan);
+  text-shadow: 0 0 5px rgba(0, 240, 255, 0.8), 0 0 15px rgba(0, 240, 255, 0.5);
+}
+
+.neon-text-purple {
+  color: var(--color-brand-purple);
+  text-shadow: 0 0 5px rgba(176, 38, 255, 0.8), 0 0 15px rgba(176, 38, 255, 0.5);
+}
+
+/* Animations for floating elements */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+  100% { transform: translateY(0px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float-delayed {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-15px); }
+  100% { transform: translateY(0px); }
+}
+
+.animate-float-delayed {
+  animation: float-delayed 7s ease-in-out infinite 2s;
+}
