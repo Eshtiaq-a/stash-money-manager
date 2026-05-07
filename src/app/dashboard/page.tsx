@@ -341,11 +341,11 @@ export default function Dashboard() {
               onChange={handleAvatarUpload}
               title="Change Profile Picture"
             />
-            <div className="w-14 h-14 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center overflow-hidden group-hover:border-blue-500 transition-colors">
+            <div className="w-20 h-20 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center overflow-hidden group-hover:border-blue-500 transition-colors shadow-lg">
               {avatarUrl ? (
                 <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                <User className="w-6 h-6 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                <User className="w-10 h-10 text-gray-400 group-hover:text-blue-500 transition-colors" />
               )}
             </div>
             {isUploadingAvatar && (
