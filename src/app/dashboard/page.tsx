@@ -18,7 +18,7 @@ export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<"dashboard" | "settings">("dashboard");
-  
+
   // Settings State
   const [displayName, setDisplayName] = useState("");
   const [dailyLimit, setDailyLimit] = useState(500);
@@ -29,7 +29,7 @@ export default function Dashboard() {
   // Expense State
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Quick Log Inputs
   const [foodAmount, setFoodAmount] = useState("");
   const [transportAmount, setTransportAmount] = useState("");
@@ -57,10 +57,10 @@ export default function Dashboard() {
           router.push("/auth/signin");
           return;
         }
-        
+
         const u = session.user;
         setUser(u);
-        
+
         if (u.user_metadata) {
           setDisplayName(u.user_metadata.display_name || u.user_metadata.full_name || u.user_metadata.name || "Student");
           setDailyLimit(Number(u.user_metadata.daily_limit) || 500);
@@ -109,14 +109,14 @@ export default function Dashboard() {
   const saveSettings = async () => {
     setIsSavingSettings(true);
     const { data, error } = await supabase.auth.updateUser({
-      data: { 
+      data: {
         display_name: displayName,
         daily_limit: dailyLimit,
         monthly_budget: monthlyBudget,
         currency: currency
       }
     });
-    
+
     if (!error && data.user) {
       setUser(data.user);
       alert("Settings saved successfully!");
@@ -133,7 +133,7 @@ export default function Dashboard() {
     const todayStr = new Date(now.getTime() - (12 * 60 * 60 * 1000)).toISOString().split('T')[0];
     const lastLogged = user.user_metadata?.last_logged_date;
     let currentStreak = Number(user.user_metadata?.streak_count) || 0;
-    
+
     if (lastLogged !== todayStr) {
       if (lastLogged) {
         const lastDate = new Date(lastLogged);
@@ -146,7 +146,7 @@ export default function Dashboard() {
       } else {
         currentStreak = 1;
       }
-      
+
       const { data: updateData } = await supabase.auth.updateUser({
         data: { streak_count: currentStreak, last_logged_date: todayStr }
       });
@@ -242,9 +242,9 @@ export default function Dashboard() {
   const resetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
   if (now.getTime() < resetTime.getTime()) resetTime.setDate(resetTime.getDate() - 1);
   const todayStart = resetTime.getTime();
-  
+
   const dailyExpenses = expenses.filter(exp => new Date(exp.created_at).getTime() >= todayStart);
-  
+
   const dailySpent = dailyExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   const monthlySpent = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
@@ -280,7 +280,7 @@ export default function Dashboard() {
     let watchId: number;
     const isLowFunds = dailySpent / dailyLimit > 0.6;
     const hezZones = user?.user_metadata?.hez_zones || [];
-    
+
     if (isLowFunds && hezZones.length > 0) {
       if (Notification.permission === 'default') Notification.requestPermission();
       watchId = navigator.geolocation.watchPosition((pos) => {
@@ -288,12 +288,12 @@ export default function Dashboard() {
           const { latitude, longitude } = pos.coords;
           hezZones.forEach((zone: any) => {
             const R = 6371e3;
-            const p1 = latitude * Math.PI/180;
-            const p2 = zone.lat * Math.PI/180;
-            const dp = (zone.lat-latitude) * Math.PI/180;
-            const dl = (zone.lng-longitude) * Math.PI/180;
-            const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
-            const dist = R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+            const p1 = latitude * Math.PI / 180;
+            const p2 = zone.lat * Math.PI / 180;
+            const dp = (zone.lat - latitude) * Math.PI / 180;
+            const dl = (zone.lng - longitude) * Math.PI / 180;
+            const a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+            const dist = R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
             if (dist < 500 && Notification.permission === 'granted') {
               new Notification('⚠️ Warning: Entering a High Expense Zone with low funds.');
             }
@@ -317,15 +317,15 @@ export default function Dashboard() {
         <div className="max-w-6xl w-full animate-pulse">
           <div className="h-10 w-48 bg-gray-800 rounded mb-4"></div>
           <div className="h-6 w-64 bg-gray-800 rounded mb-12"></div>
-          
+
           <div className="h-48 w-full bg-gray-800 rounded-3xl mb-8"></div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-             <div className="h-48 bg-gray-800 rounded-3xl"></div>
-             <div className="h-48 bg-gray-800 rounded-3xl"></div>
-             <div className="h-48 bg-gray-800 rounded-3xl"></div>
+            <div className="h-48 bg-gray-800 rounded-3xl"></div>
+            <div className="h-48 bg-gray-800 rounded-3xl"></div>
+            <div className="h-48 bg-gray-800 rounded-3xl"></div>
           </div>
-          
+
           <div className="h-64 w-full bg-gray-800 rounded-3xl"></div>
         </div>
       </div>
@@ -334,7 +334,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-200 font-sans selection:bg-blue-500/30">
-      
+
       {/* Navbar */}
       <nav className="w-full px-6 py-4 border-b border-gray-800 bg-[#161b22] sticky top-0 z-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
@@ -346,15 +346,15 @@ export default function Dashboard() {
               Stash
             </span>
           </Link>
-          
+
           <div className="flex items-center gap-2 bg-gray-800/50 p-1 rounded-lg">
-            <button 
+            <button
               onClick={() => setActiveTab('dashboard')}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'dashboard' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}
             >
               <LayoutDashboard className="w-4 h-4" /> <span className="hidden sm:inline">My Dashboard</span>
             </button>
-            <button 
+            <button
               onClick={() => setActiveTab('settings')}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'settings' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}
             >
@@ -365,7 +365,7 @@ export default function Dashboard() {
       </nav>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
-        
+
         {/* User Header */}
         <div className="mb-8 flex justify-between items-start">
           <div>
@@ -384,40 +384,40 @@ export default function Dashboard() {
               </div>
             )}
             <div className="relative group">
-              <input 
-                type="file" 
-                accept="image/*" 
+              <input
+                type="file"
+                accept="image/*"
                 className="absolute inset-0 opacity-0 cursor-pointer z-10"
                 onChange={handleAvatarUpload}
                 title="Change Profile Picture"
                 aria-label="Upload Profile Picture"
               />
-            <div className="w-20 h-20 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center overflow-hidden group-hover:border-blue-500 transition-colors shadow-lg">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <User className="w-10 h-10 text-gray-400 group-hover:text-blue-500 transition-colors" />
+              <div className="w-20 h-20 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center overflow-hidden group-hover:border-blue-500 transition-colors shadow-lg">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-10 h-10 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                )}
+              </div>
+              {isUploadingAvatar && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                </div>
               )}
             </div>
-            {isUploadingAvatar && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
-                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              </div>
-            )}
           </div>
         </div>
-      </div>
 
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && (
-            <motion.div 
+            <motion.div
               key="dashboard"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               className="space-y-8"
             >
-              
+
               {/* DAILY BUDGET HEADER (Large & Prominent) */}
               <div className="flex flex-col md:flex-row items-center gap-6 p-8 bg-gradient-to-r from-blue-600/20 to-transparent border border-blue-500/30 rounded-3xl relative overflow-hidden shadow-[0_10px_40px_rgba(59,130,246,0.1)]">
                 <div className="absolute -right-10 -top-10 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl"></div>
@@ -431,14 +431,13 @@ export default function Dashboard() {
                     <span className="text-blue-400/80 font-medium text-xl">/ {currency}{dailyLimit}</span>
                   </div>
                   <div className="h-4 w-full max-w-xl bg-gray-900 rounded-full overflow-hidden shadow-inner border border-gray-800">
-                    <motion.div 
+                    <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${budgetPercentage}%` }}
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        budgetPercentage > 90 ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 
-                        budgetPercentage > 75 ? 'bg-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 
-                        'bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]'
-                      }`}
+                      className={`h-full rounded-full transition-all duration-500 ${budgetPercentage > 90 ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]' :
+                        budgetPercentage > 75 ? 'bg-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' :
+                          'bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]'
+                        }`}
                     />
                   </div>
                   {budgetPercentage >= 100 && (
@@ -449,7 +448,7 @@ export default function Dashboard() {
 
               {/* Top Overview Cards */}
               <div className="grid md:grid-cols-3 gap-6">
-                
+
                 {/* Stash Points Card */}
                 <div className="bg-[#161b22] border-2 border-green-500/30 p-8 rounded-3xl shadow-lg relative overflow-hidden">
                   <div className="absolute -right-6 -top-6 w-32 h-32 bg-green-500/10 rounded-full blur-2xl"></div>
@@ -476,14 +475,13 @@ export default function Dashboard() {
                   </div>
                   <div className="text-sm text-gray-500 font-medium mb-3">Limit: {currency}{monthlyBudget.toLocaleString()}</div>
                   <div className="h-3 w-full bg-gray-900 rounded-full overflow-hidden shadow-inner border border-gray-800">
-                    <motion.div 
+                    <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${monthlyPercentage}%` }}
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        monthlyPercentage > 90 ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 
-                        monthlyPercentage > 75 ? 'bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 
-                        'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]'
-                      }`}
+                      className={`h-full rounded-full transition-all duration-500 ${monthlyPercentage > 90 ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' :
+                        monthlyPercentage > 75 ? 'bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]' :
+                          'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]'
+                        }`}
                     />
                   </div>
                 </div>
@@ -515,7 +513,7 @@ export default function Dashboard() {
               <div>
                 <h2 className="text-2xl font-bold text-white mb-6">Quick Log</h2>
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  
+
                   {/* Food Card */}
                   <div className="bg-[#161b22] border border-gray-800 p-5 rounded-2xl">
                     <div className="flex items-center gap-3 mb-4">
@@ -528,9 +526,9 @@ export default function Dashboard() {
                       <div className="relative flex flex-col">
                         <label htmlFor="foodAmount" className="sr-only">Food Amount</label>
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">{currency}</span>
-                        <input 
+                        <input
                           id="foodAmount"
-                          type="number" 
+                          type="number"
                           value={foodAmount}
                           onChange={(e) => setFoodAmount(e.target.value)}
                           placeholder="0.00"
@@ -538,7 +536,7 @@ export default function Dashboard() {
                           aria-label="Enter food expense amount"
                         />
                       </div>
-                      <button 
+                      <button
                         onClick={() => logExpense("Food", foodAmount, setFoodAmount)}
                         className="w-full bg-green-600/20 hover:bg-green-600 text-green-500 hover:text-white font-medium py-3 rounded-xl transition-colors border border-green-500/30"
                         aria-label="Log Food Expense"
@@ -560,9 +558,9 @@ export default function Dashboard() {
                       <div className="relative flex flex-col">
                         <label htmlFor="transportAmount" className="sr-only">Transport Amount</label>
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">{currency}</span>
-                        <input 
+                        <input
                           id="transportAmount"
-                          type="number" 
+                          type="number"
                           value={transportAmount}
                           onChange={(e) => setTransportAmount(e.target.value)}
                           placeholder="0.00"
@@ -570,7 +568,7 @@ export default function Dashboard() {
                           aria-label="Enter transport expense amount"
                         />
                       </div>
-                      <button 
+                      <button
                         onClick={() => logExpense("Transport", transportAmount, setTransportAmount)}
                         className="w-full bg-blue-600/20 hover:bg-blue-600 text-blue-500 hover:text-white font-medium py-3 rounded-xl transition-colors border border-blue-500/30"
                         aria-label="Log Transport Expense"
@@ -592,9 +590,9 @@ export default function Dashboard() {
                       <div className="relative flex flex-col">
                         <label htmlFor="shoppingAmount" className="sr-only">Shopping Amount</label>
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">{currency}</span>
-                        <input 
+                        <input
                           id="shoppingAmount"
-                          type="number" 
+                          type="number"
                           value={shoppingAmount}
                           onChange={(e) => setShoppingAmount(e.target.value)}
                           placeholder="0.00"
@@ -602,7 +600,7 @@ export default function Dashboard() {
                           aria-label="Enter shopping expense amount"
                         />
                       </div>
-                      <button 
+                      <button
                         onClick={() => logExpense("Shopping", shoppingAmount, setShoppingAmount)}
                         className="w-full bg-purple-600/20 hover:bg-purple-600 text-purple-500 hover:text-white font-medium py-3 rounded-xl transition-colors border border-purple-500/30"
                         aria-label="Log Shopping Expense"
@@ -623,15 +621,15 @@ export default function Dashboard() {
                     <div className="flex flex-col gap-3">
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">{currency}</span>
-                        <input 
-                          type="number" 
+                        <input
+                          type="number"
                           value={otherAmount}
                           onChange={(e) => setOtherAmount(e.target.value)}
                           placeholder="0.00"
                           className="w-full bg-[#0d1117] border border-gray-800 rounded-xl py-3 pl-8 pr-3 text-white focus:outline-none focus:border-gray-500"
                         />
                       </div>
-                      <button 
+                      <button
                         onClick={() => logExpense("Other", otherAmount, setOtherAmount)}
                         className="w-full bg-gray-600/20 hover:bg-gray-600 text-gray-300 hover:text-white font-medium py-3 rounded-xl transition-colors border border-gray-500/30"
                       >
@@ -651,7 +649,7 @@ export default function Dashboard() {
                     <h2 className="text-xl font-bold text-white">Historical Transaction Archive</h2>
                   </div>
                   <div className="flex items-center gap-3">
-                    <select 
+                    <select
                       value={selectedHistoryDate}
                       onChange={(e) => setSelectedHistoryDate(e.target.value)}
                       className="bg-[#0d1117] border border-gray-700 text-white text-sm rounded-lg py-2 px-3 focus:outline-none focus:border-blue-500"
@@ -672,7 +670,7 @@ export default function Dashboard() {
                     <span className="text-white font-bold text-xl">{currency}{filteredHistoryTotal.toLocaleString()}</span>
                   </div>
                 )}
-                
+
                 <div className="divide-y divide-gray-800 max-h-[500px] overflow-y-auto">
                   {filteredHistory.length === 0 ? (
                     <div className="p-12 text-center text-gray-500 font-medium">
@@ -682,12 +680,11 @@ export default function Dashboard() {
                     filteredHistory.map((exp) => (
                       <div key={exp.id} className="p-5 px-8 flex items-center justify-between hover:bg-gray-800/30 transition-colors">
                         <div className="flex items-center gap-5">
-                          <div className={`p-3 rounded-full ${
-                            exp.category === 'Food' ? 'bg-green-500/10 text-green-500' :
+                          <div className={`p-3 rounded-full ${exp.category === 'Food' ? 'bg-green-500/10 text-green-500' :
                             exp.category === 'Transport' ? 'bg-blue-500/10 text-blue-500' :
-                            exp.category === 'Shopping' ? 'bg-purple-500/10 text-purple-500' :
-                            'bg-gray-500/10 text-gray-400'
-                          }`}>
+                              exp.category === 'Shopping' ? 'bg-purple-500/10 text-purple-500' :
+                                'bg-gray-500/10 text-gray-400'
+                            }`}>
                             {exp.category === 'Food' && <Coffee className="w-5 h-5" />}
                             {exp.category === 'Transport' && <Car className="w-5 h-5" />}
                             {exp.category === 'Shopping' && <ShoppingBag className="w-5 h-5" />}
@@ -695,7 +692,7 @@ export default function Dashboard() {
                           </div>
                           <div>
                             <p className="font-bold text-white text-lg">{exp.category}</p>
-                            <p className="text-sm text-gray-500">{new Date(exp.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                            <p className="text-sm text-gray-500">{new Date(exp.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                           </div>
                         </div>
                         <div className="text-white font-bold text-xl">
@@ -711,7 +708,7 @@ export default function Dashboard() {
           )}
 
           {activeTab === 'settings' && (
-            <motion.div 
+            <motion.div
               key="settings"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -720,12 +717,12 @@ export default function Dashboard() {
             >
               <div className="bg-[#161b22] border border-gray-800 p-8 rounded-2xl">
                 <h2 className="text-2xl font-bold text-white mb-6 border-b border-gray-800 pb-4">Profile & Settings</h2>
-                
+
                 <div className="space-y-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">Username</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       className="w-full bg-[#0d1117] border border-gray-800 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-blue-500"
@@ -735,8 +732,8 @@ export default function Dashboard() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-400 mb-2">Daily Limit</label>
-                      <input 
-                        type="number" 
+                      <input
+                        type="number"
                         value={dailyLimit}
                         onChange={(e) => setDailyLimit(Number(e.target.value))}
                         className="w-full bg-[#0d1117] border border-gray-800 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-blue-500"
@@ -744,8 +741,8 @@ export default function Dashboard() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-400 mb-2">Monthly Budget</label>
-                      <input 
-                        type="number" 
+                      <input
+                        type="number"
                         value={monthlyBudget}
                         onChange={(e) => setMonthlyBudget(Number(e.target.value))}
                         className="w-full bg-[#0d1117] border border-gray-800 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-blue-500"
@@ -755,7 +752,7 @@ export default function Dashboard() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">Preferred Currency</label>
-                    <select 
+                    <select
                       value={CURRENCY_SYMBOLS[currency] ? Object.keys(CURRENCY_SYMBOLS).find(k => CURRENCY_SYMBOLS[k] === currency) : "BDT"}
                       onChange={(e) => setCurrency(CURRENCY_SYMBOLS[e.target.value] || "৳")}
                       className="w-full bg-[#0d1117] border border-gray-800 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-blue-500 appearance-none"
@@ -767,7 +764,7 @@ export default function Dashboard() {
                     </select>
                   </div>
 
-                  <button 
+                  <button
                     onClick={saveSettings}
                     disabled={isSavingSettings}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2 mt-4"
@@ -780,7 +777,7 @@ export default function Dashboard() {
               <div className="bg-[#161b22] border border-red-900/30 p-8 rounded-2xl">
                 <h3 className="text-xl font-bold text-white mb-2">Account Access</h3>
                 <p className="text-gray-400 text-sm mb-6">Securely log out of your Stash account.</p>
-                <button 
+                <button
                   onClick={handleSignOut}
                   className="bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white font-medium px-6 py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
