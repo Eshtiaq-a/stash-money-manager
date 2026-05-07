@@ -7,6 +7,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
 
 import Footer from "@/components/Footer";
+import { Analytics } from '@vercel/analytics/next';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://stash-saver.vercel.app";
 const appName = "Stash Saver";
@@ -74,6 +75,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col font-sans bg-[#0a0e17] text-[#f1f5f9]">
         {children}
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
