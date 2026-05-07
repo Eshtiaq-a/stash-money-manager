@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, Coffee, Car, ShoppingBag, Settings, LayoutDashboard, Save, Box, Wallet, MapPin, AlertTriangle, Navigation, Calendar, Flame } from "lucide-react";
+import { AlertTriangle, Box, Calendar, Camera, Car, Coffee, Crosshair, Flame, LayoutDashboard, LogOut, MapPin, Medal, Navigation, RadioTower, Save, Settings, Shield, ShoppingBag, Trophy, Upload, Wallet, X } from "lucide-react";
 
 interface Expense {
   id: string;
@@ -19,6 +19,19 @@ interface HighExpenseZone {
   lat: number;
   lng: number;
   timestamp: string;
+}
+
+interface Profile {
+  id: string;
+  avatar_url?: string | null;
+  display_name?: string | null;
+  full_name?: string | null;
+  total_points?: number | null;
+  last_points_awarded_on?: string | null;
+}
+
+interface LeaderboardProfile extends Profile {
+  rank: number;
 }
 
 interface ProviderIdentity {
@@ -42,6 +55,8 @@ interface StashUserMetadata {
   name?: string;
   picture?: string;
   provider_avatar_url?: string;
+  total_points?: number | string;
+  last_points_awarded_on?: string;
   streak_count?: number | string;
 }
 
@@ -49,6 +64,24 @@ type StashUser = SupabaseUser & {
   identities?: ProviderIdentity[];
   user_metadata: StashUserMetadata;
 };
+
+const POINT_AWARD_SCALE = 100;
+
+function getOperationalDate(date = new Date()) {
+  return new Date(date.getTime() - (12 * 60 * 60 * 1000)).toISOString().split("T")[0];
+}
+
+function getRankBadge(points: number) {
+  if (points >= 5000) return { label: "Commander", className: "border-emerald-400/60 bg-emerald-400/10 text-emerald-300" };
+  if (points >= 2500) return { label: "Captain", className: "border-lime-400/60 bg-lime-400/10 text-lime-300" };
+  if (points >= 1000) return { label: "Specialist", className: "border-cyan-400/60 bg-cyan-400/10 text-cyan-300" };
+  return { label: "Recruit", className: "border-gray-500/60 bg-gray-500/10 text-gray-300" };
+}
+
+function calculateMonthlyDisciplinePoints(totalBudget: number, spent: number) {
+  if (totalBudget <= 0 || spent >= totalBudget) return 0;
+  return Math.round(((totalBudget - spent) / totalBudget) * POINT_AWARD_SCALE);
+}
 
 export default function Dashboard() {
   const router = useRouter();
@@ -75,6 +108,23 @@ export default function Dashboard() {
   // Phase 8 States
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [selectedHistoryDate, setSelectedHistoryDate] = useState("");
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardProfile[]>([]);
+  const [currentRank, setCurrentRank] = useState<number | null>(null);
+  const [leaderboardError, setLeaderboardError] = useState("");
+  const [pointsError, setPointsError] = useState("");
+  const displayNameRef = useRef(displayName);
+  const profileRef = useRef<Profile | null>(profile);
+  const userRef = useRef<StashUser | null>(user);
+
+  useEffect(() => {
+    displayNameRef.current = displayName;
+    profileRef.current = profile;
+    userRef.current = user;
+  }, [displayName, profile, user]);
 
   const CURRENCY_SYMBOLS: Record<string, string> = {
     BDT: "৳",
@@ -82,6 +132,121 @@ export default function Dashboard() {
     INR: "₹",
     SAR: "﷼"
   };
+
+  const fetchLeaderboard = useCallback(async (userId: string) => {
+    setLeaderboardError("");
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, display_name, full_name, avatar_url, total_points")
+      .order("total_points", { ascending: false })
+      .limit(10);
+
+    if (error) {
+      setLeaderboardError("Leaderboard needs profiles.total_points access.");
+      console.error("Leaderboard fetch error:", error);
+      return;
+    }
+
+    const rankedProfiles = (data || []).map((item, index) => ({
+      ...item,
+      total_points: Number(item.total_points) || 0,
+      rank: index + 1,
+    }));
+    setLeaderboard(rankedProfiles);
+
+    const topRank = rankedProfiles.find((item) => item.id === userId)?.rank;
+    if (topRank) {
+      setCurrentRank(topRank);
+      return;
+    }
+
+    const { data: currentProfile } = await supabase
+      .from("profiles")
+      .select("total_points")
+      .eq("id", userId)
+      .single();
+    const ownPoints = Number(currentProfile?.total_points) || 0;
+    const { count } = await supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .gt("total_points", ownPoints);
+    setCurrentRank((count || 0) + 1);
+  }, []);
+
+  const fetchProfile = useCallback(async (u: StashUser) => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, display_name, full_name, avatar_url, total_points, last_points_awarded_on")
+      .eq("id", u.id)
+      .single();
+
+    if (error) {
+      console.error("Profile table fetch error:", error);
+      return null;
+    }
+
+    setProfile(data);
+    setDisplayName(data.display_name || data.full_name || u.user_metadata.display_name || u.user_metadata.full_name || u.user_metadata.name || "Student");
+    return data;
+  }, []);
+
+  const syncProfile = useCallback(async (userId: string, updates: Partial<Profile>) => {
+    const currentProfile = profileRef.current;
+    const currentUser = userRef.current;
+    const payload = {
+      id: userId,
+      display_name: updates.display_name ?? displayNameRef.current,
+      avatar_url: updates.avatar_url ?? currentProfile?.avatar_url ?? null,
+      total_points: updates.total_points ?? currentProfile?.total_points ?? (Number(currentUser?.user_metadata?.total_points) || 0),
+      last_points_awarded_on: updates.last_points_awarded_on ?? currentProfile?.last_points_awarded_on ?? currentUser?.user_metadata?.last_points_awarded_on ?? null,
+    };
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .upsert(payload)
+      .select("id, display_name, full_name, avatar_url, total_points, last_points_awarded_on")
+      .single();
+
+    if (error) {
+      console.error("Profile sync error:", error);
+      return null;
+    }
+
+    setProfile(data);
+    return data;
+  }, []);
+
+  const awardDailyStashPoints = useCallback(async (u: StashUser, expenseList: Expense[], profileData: Profile | null) => {
+    const today = getOperationalDate();
+    const lastAwardDate = profileData?.last_points_awarded_on || u.user_metadata.last_points_awarded_on;
+    if (lastAwardDate === today) return;
+
+    const budget = Number(u.user_metadata.monthly_budget) || 15000;
+    const spent = expenseList.reduce((sum, exp) => sum + exp.amount, 0);
+    const pointsToAward = calculateMonthlyDisciplinePoints(budget, spent);
+    const currentTotal = Number(profileData?.total_points ?? u.user_metadata.total_points) || 0;
+    const nextTotal = currentTotal + pointsToAward;
+
+    setPointsError("");
+    const synced = await syncProfile(u.id, {
+      total_points: nextTotal,
+      last_points_awarded_on: today,
+      display_name: displayNameRef.current || u.user_metadata.display_name || u.user_metadata.full_name || u.user_metadata.name || "Student",
+    });
+
+    const { data } = await supabase.auth.updateUser({
+      data: {
+        total_points: nextTotal,
+        last_points_awarded_on: today,
+      },
+    });
+    if (data?.user) setUser(data.user as StashUser);
+
+    if (!synced) {
+      setPointsError("Daily Stash Points could not sync to profiles.");
+    }
+    await fetchLeaderboard(u.id);
+  }, [fetchLeaderboard, syncProfile]);
 
   async function fetchExpenses(userId: string) {
     try {
@@ -96,11 +261,11 @@ export default function Dashboard() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      if (data) {
-        setExpenses(data);
-      }
+      if (data) setExpenses(data);
+      return data || [];
     } catch (err) {
       console.error("Transaction fetch error:", err);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -117,7 +282,6 @@ export default function Dashboard() {
         }
 
         const u = session.user as StashUser;
-        setUser(u);
 
         if (u.user_metadata) {
           setDisplayName(u.user_metadata.display_name || u.user_metadata.full_name || u.user_metadata.name || "Student");
@@ -126,7 +290,13 @@ export default function Dashboard() {
           setCurrency(u.user_metadata.currency || "৳");
         }
 
-        await fetchExpenses(u.id);
+        setUser(u);
+        const [profileData, expenseData] = await Promise.all([
+          fetchProfile(u),
+          fetchExpenses(u.id),
+          fetchLeaderboard(u.id),
+        ]);
+        await awardDailyStashPoints(u, expenseData, profileData);
       } catch (err) {
         console.error("Profile fetch error:", err);
         setLoading(false);
@@ -134,7 +304,7 @@ export default function Dashboard() {
     };
 
     checkUser();
-  }, [router]);
+  }, [awardDailyStashPoints, fetchLeaderboard, fetchProfile, router]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -154,6 +324,8 @@ export default function Dashboard() {
 
     if (!error && data.user) {
       setUser(data.user as StashUser);
+      await syncProfile(data.user.id, { display_name: displayName });
+      await fetchLeaderboard(data.user.id);
       alert("Settings saved successfully!");
     }
     setIsSavingSettings(false);
@@ -211,7 +383,7 @@ export default function Dashboard() {
 
   // Loading state moved to bottom to prevent Hook rule violations
 
-  const compressImage = (file: File): Promise<Blob> => {
+  const cropAvatarImage = (file: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -220,13 +392,13 @@ export default function Dashboard() {
         img.src = event.target?.result as string;
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          if (width > 400) { height = Math.round(height * 400 / width); width = 400; }
-          canvas.width = width;
-          canvas.height = height;
+          const size = Math.min(img.width, img.height);
+          const sx = (img.width - size) / 2;
+          const sy = (img.height - size) / 2;
+          canvas.width = 512;
+          canvas.height = 512;
           const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
+          ctx?.drawImage(img, sx, sy, size, size, 0, 0, 512, 512);
           canvas.toBlob((blob) => {
             if (blob) resolve(blob);
             else reject(new Error("Compression failed"));
@@ -236,21 +408,37 @@ export default function Dashboard() {
     });
   };
 
-  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
+
+  const closeProfileModal = () => {
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    setAvatarPreview(null);
+    setAvatarFile(null);
+    setIsProfileModalOpen(false);
+  };
+
+  const handleAvatarUpload = async () => {
     try {
-      if (!event.target.files || event.target.files.length === 0) return;
-      if (!user) return;
+      if (!avatarFile || !user) return;
       setIsUploadingAvatar(true);
-      const file = event.target.files[0];
-      const compressedBlob = await compressImage(file);
-      const fileName = `${user.id}-avatar-${Date.now()}.jpg`;
+      const compressedBlob = await cropAvatarImage(avatarFile);
+      const fileName = `${user.id}/avatar-${Date.now()}.jpg`;
 
       const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, compressedBlob, { contentType: 'image/jpeg', upsert: true });
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
       const { data, error } = await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
-      if (!error && data.user) setUser(data.user as StashUser);
+      if (error) throw error;
+      if (data.user) setUser(data.user as StashUser);
+      await syncProfile(user.id, { avatar_url: publicUrl, display_name: displayName });
+      await fetchLeaderboard(user.id);
+      closeProfileModal();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown upload error";
       alert(`Avatar Upload Error: ${message}`);
@@ -285,21 +473,11 @@ export default function Dashboard() {
   const dailySpent = dailyExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   const monthlySpent = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
-  // Calculate Stash Points: Only award points for days where the user actively logged expenses.
-  const expensesByDate = expenses.reduce((acc, exp) => {
-    // Format date carefully to handle the 12 PM reset logic if needed, 
-    // but a simple ISO string split works well for grouping by calendar day.
-    const d = new Date(new Date(exp.created_at).getTime() - (12 * 60 * 60 * 1000)).toISOString().split('T')[0];
-    acc[d] = (acc[d] || 0) + exp.amount;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const stashPoints = Object.values(expensesByDate).reduce((total, dailyAmount) => {
-    return total + Math.max(0, dailyLimit - dailyAmount);
-  }, 0);
-
   const budgetPercentage = Math.min((dailySpent / dailyLimit) * 100, 100);
   const monthlyPercentage = monthlyBudget > 0 ? Math.min((monthlySpent / monthlyBudget) * 100, 100) : 0;
+  const projectedDailyPoints = calculateMonthlyDisciplinePoints(monthlyBudget, monthlySpent);
+  const totalStashPoints = Number(profile?.total_points ?? user?.user_metadata?.total_points) || 0;
+  const rankBadge = getRankBadge(totalStashPoints);
 
   const uniqueDates = useMemo(() => {
     const dates = expenses.map(exp => new Date(exp.created_at).toISOString().split('T')[0]);
@@ -344,6 +522,7 @@ export default function Dashboard() {
 
   const flag = user?.user_metadata?.flag || "";
   const avatarUrl =
+    profile?.avatar_url ||
     user?.user_metadata?.avatar_url ||
     user?.user_metadata?.picture ||
     user?.user_metadata?.provider_avatar_url ||
@@ -424,15 +603,7 @@ export default function Dashboard() {
                 <span>{streakCount} <span className="text-sm opacity-80">Day Streak</span></span>
               </div>
             )}
-            <div className="relative group">
-              <input
-                type="file"
-                accept="image/*"
-                className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                onChange={handleAvatarUpload}
-                title="Change Profile Picture"
-                aria-label="Upload Profile Picture"
-              />
+            <button type="button" onClick={() => setIsProfileModalOpen(true)} className="relative group" aria-label="Edit Profile">
               <div className="w-20 h-20 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center overflow-hidden group-hover:border-green-500 transition-colors shadow-lg">
                 {avatarUrl ? (
                   <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
@@ -447,9 +618,67 @@ export default function Dashboard() {
                   <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                 </div>
               )}
-            </div>
+              <span className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border border-green-500/40 bg-[#0d1117] text-green-400">
+                <Camera className="h-4 w-4" />
+              </span>
+            </button>
           </div>
         </div>
+
+        <AnimatePresence>
+          {isProfileModalOpen && (
+            <motion.div
+              className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                className="w-full max-w-md border border-green-500/30 bg-[#10151d] p-6 shadow-[0_0_30px_rgba(34,197,94,0.18)]"
+                initial={{ scale: 0.96, y: 16 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.96, y: 16 }}
+              >
+                <div className="mb-6 flex items-center justify-between border-b border-gray-800 pb-4">
+                  <div className="flex items-center gap-3">
+                    <Shield className="h-5 w-5 text-green-400" />
+                    <h2 className="text-xl font-bold text-white">Edit Profile</h2>
+                  </div>
+                  <button onClick={closeProfileModal} className="text-gray-400 hover:text-white" aria-label="Close Edit Profile">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="flex flex-col items-center gap-5">
+                  <div className="relative h-40 w-40 overflow-hidden rounded-full border-2 border-green-500/50 bg-[#0d1117] shadow-[0_0_25px_rgba(34,197,94,0.18)]">
+                    {(avatarPreview || avatarUrl) ? (
+                      <img src={avatarPreview || avatarUrl} alt="Avatar preview" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-5xl font-black text-green-300">S</div>
+                    )}
+                    <div className="pointer-events-none absolute inset-0 rounded-full border border-white/10" />
+                    <Crosshair className="pointer-events-none absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-green-300/40" />
+                  </div>
+
+                  <label className="flex w-full cursor-pointer items-center justify-center gap-2 border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm font-bold text-green-300 transition-colors hover:bg-green-500/20">
+                    <Upload className="h-4 w-4" />
+                    Select Tactical Avatar
+                    <input type="file" accept="image/*" className="sr-only" onChange={handleAvatarFileSelect} />
+                  </label>
+
+                  <button
+                    onClick={handleAvatarUpload}
+                    disabled={!avatarFile || isUploadingAvatar}
+                    className="flex w-full items-center justify-center gap-2 bg-green-600 px-4 py-3 font-bold text-[#07110b] transition-colors hover:bg-green-400 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+                  >
+                    <Save className="h-4 w-4" />
+                    {isUploadingAvatar ? "Uploading..." : "Save Profile"}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && (
@@ -462,16 +691,16 @@ export default function Dashboard() {
             >
 
               {/* DAILY BUDGET HEADER (Large & Prominent) */}
-              <div className="flex flex-col md:flex-row items-center gap-6 p-8 bg-gradient-to-r from-blue-600/20 to-transparent border border-blue-500/30 rounded-3xl relative overflow-hidden shadow-[0_10px_40px_rgba(59,130,246,0.1)]">
-                <div className="absolute -right-10 -top-10 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl"></div>
-                <div className="p-5 bg-blue-500/20 rounded-full shadow-[0_0_30px_rgba(59,130,246,0.3)]">
-                  <Wallet className="w-10 h-10 text-blue-400" />
+              <div className="flex flex-col md:flex-row items-center gap-6 p-8 bg-gradient-to-r from-green-600/15 to-transparent border border-green-500/30 rounded-3xl relative overflow-hidden shadow-[0_10px_40px_rgba(34,197,94,0.08)]">
+                <div className="absolute -right-10 -top-10 w-48 h-48 bg-green-500/10 rounded-full blur-3xl"></div>
+                <div className="p-5 bg-green-500/15 rounded-full shadow-[0_0_30px_rgba(34,197,94,0.2)]">
+                  <Wallet className="w-10 h-10 text-green-400" />
                 </div>
                 <div className="w-full flex-1">
-                  <h2 className="text-lg text-blue-500 font-bold uppercase tracking-widest mb-1">Today&apos;s Daily Budget</h2>
+                  <h2 className="text-lg text-green-400 font-bold uppercase tracking-widest mb-1">Today&apos;s Daily Budget</h2>
                   <div className="flex items-baseline gap-2 mb-3">
                     <span className="text-6xl md:text-7xl font-black text-white">{currency}{dailySpent.toLocaleString()}</span>
-                    <span className="text-blue-400/80 font-medium text-xl">/ {currency}{dailyLimit}</span>
+                    <span className="text-green-400/80 font-medium text-xl">/ {currency}{dailyLimit}</span>
                   </div>
                   <div className="h-4 w-full max-w-xl bg-gray-900 rounded-full overflow-hidden shadow-inner border border-gray-800">
                     <motion.div
@@ -479,12 +708,12 @@ export default function Dashboard() {
                       animate={{ width: `${budgetPercentage}%` }}
                       className={`h-full rounded-full transition-all duration-500 ${budgetPercentage > 90 ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]' :
                         budgetPercentage > 75 ? 'bg-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' :
-                          'bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]'
+                          'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.5)]'
                         }`}
                     />
                   </div>
                   {budgetPercentage >= 100 && (
-                    <p className="text-red-400 text-sm mt-3 font-medium">Daily limit exceeded! No points earned today.</p>
+                    <p className="text-red-400 text-sm mt-3 font-medium">Daily limit exceeded. This cycle awards zero Stash Points.</p>
                   )}
                 </div>
               </div>
@@ -495,14 +724,22 @@ export default function Dashboard() {
                 {/* Stash Points Card */}
                 <div className="bg-[#161b22] border-2 border-green-500/30 p-8 rounded-3xl shadow-lg relative overflow-hidden">
                   <div className="absolute -right-6 -top-6 w-32 h-32 bg-green-500/10 rounded-full blur-2xl"></div>
-                  <h3 className="text-lg font-medium text-gray-400 mb-6">Stash Points</h3>
+                  <h3 className="text-lg font-medium text-gray-400 mb-6 flex items-center gap-2">
+                    <Trophy className="h-5 w-5 text-green-400" />
+                    Stash Points
+                  </h3>
                   <div className="flex flex-col mb-2">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-6xl font-black text-white tracking-tight">{stashPoints}</span>
+                      <span className="text-6xl font-black text-white tracking-tight">{totalStashPoints}</span>
                       <span className="text-green-500 font-bold">pts</span>
                     </div>
                   </div>
-                  <p className="text-sm text-gray-500 mt-2">1:1 ratio for savings.</p>
+                  <div className={`mt-4 inline-flex items-center gap-2 border px-3 py-1 text-xs font-bold uppercase ${rankBadge.className}`}>
+                    <Medal className="h-3.5 w-3.5" />
+                    {rankBadge.label}
+                  </div>
+                  <p className="text-sm text-gray-500 mt-3">Daily award projection: {projectedDailyPoints} pts from monthly budget discipline.</p>
+                  {pointsError && <p className="mt-2 text-xs text-yellow-400">{pointsError}</p>}
                 </div>
 
                 {/* Monthly Budget Card */}
@@ -550,6 +787,54 @@ export default function Dashboard() {
                   </div>
                 </div>
 
+              </div>
+
+              <div className="bg-[#161b22] border border-green-500/20 rounded-2xl overflow-hidden">
+                <div className="flex flex-col gap-3 border-b border-gray-800 p-6 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <RadioTower className="h-6 w-6 text-green-400" />
+                    <div>
+                      <h2 className="text-xl font-bold text-white">Global Leaderboard</h2>
+                      <p className="text-sm text-gray-500">Ranked by total Stash Points.</p>
+                    </div>
+                  </div>
+                  <div className="border border-green-500/30 bg-green-500/10 px-4 py-2 text-sm font-bold text-green-300">
+                    Your Rank: {currentRank ? `#${currentRank}` : "Scanning"}
+                  </div>
+                </div>
+                <div className="divide-y divide-gray-800">
+                  {leaderboardError ? (
+                    <div className="p-6 text-sm text-yellow-400">{leaderboardError}</div>
+                  ) : leaderboard.length === 0 ? (
+                    <div className="p-6 text-sm text-gray-500">No leaderboard signals yet.</div>
+                  ) : leaderboard.map((entry) => {
+                    const entryPoints = Number(entry.total_points) || 0;
+                    const entryBadge = getRankBadge(entryPoints);
+                    const name = entry.display_name || entry.full_name || "Stash Operator";
+                    return (
+                      <div key={entry.id} className={`flex items-center justify-between gap-4 p-4 ${entry.id === user?.id ? "bg-green-500/5" : ""}`}>
+                        <div className="flex min-w-0 items-center gap-4">
+                          <div className="w-10 text-center font-black text-green-300">#{entry.rank}</div>
+                          <div className="h-11 w-11 overflow-hidden rounded-full border border-gray-700 bg-[#0d1117]">
+                            {entry.avatar_url ? (
+                              <img src={entry.avatar_url} alt="" className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center font-black text-green-300">S</div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-bold text-white">{name}</p>
+                            <span className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[11px] font-bold uppercase ${entryBadge.className}`}>
+                              <Shield className="h-3 w-3" />
+                              {entryBadge.label}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right font-black text-white">{entryPoints.toLocaleString()} <span className="text-xs text-green-400">pts</span></div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Quick-Log Section */}
@@ -810,9 +1095,15 @@ export default function Dashboard() {
                   <button
                     onClick={saveSettings}
                     disabled={isSavingSettings}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2 mt-4"
+                    className="w-full bg-green-600 hover:bg-green-500 text-[#07110b] font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2 mt-4"
                   >
                     <Save className="w-4 h-4" /> {isSavingSettings ? "Saving..." : "Save Preferences"}
+                  </button>
+                  <button
+                    onClick={() => setIsProfileModalOpen(true)}
+                    className="w-full border border-green-500/30 bg-green-500/10 text-green-300 hover:bg-green-500/20 font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Camera className="w-4 h-4" /> Edit Profile Avatar
                   </button>
                 </div>
               </div>

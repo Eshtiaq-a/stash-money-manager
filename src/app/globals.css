@@ -64,3 +64,45 @@ body {
 .animate-float-delayed {
   animation: float-delayed 7s ease-in-out infinite 2s;
 }
+
+.hez-pulse-marker {
+  background: transparent;
+  border: 0;
+}
+
+.hez-pulse-core {
+  position: relative;
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 6px;
+  border: 2px solid #fecaca;
+  border-radius: 9999px;
+  background: #ef4444;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.9);
+}
+
+.hez-pulse-core::before,
+.hez-pulse-core::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border: 1px solid rgba(239, 68, 68, 0.75);
+  border-radius: 9999px;
+  animation: hez-pulse 1.8s ease-out infinite;
+}
+
+.hez-pulse-core::after {
+  animation-delay: 0.9s;
+}
+
+@keyframes hez-pulse {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.45);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, RadioTower } from "lucide-react";
 
 // Dynamically import the map component to avoid SSR window errors
 const MapComponent = dynamic(() => import("./MapComponent"), { 
@@ -30,13 +30,13 @@ export default function MapPage() {
       </nav>
 
       <main className="flex-1 flex flex-col items-center justify-center p-6 relative">
-        <div className="w-full max-w-6xl h-[70vh] bg-[#161b22] border-2 border-red-500/30 rounded-3xl overflow-hidden shadow-2xl relative">
+        <div className="w-full max-w-6xl h-[70vh] bg-[#161b22] border-2 border-red-500/30 rounded-2xl overflow-hidden shadow-2xl relative">
            <MapComponent />
         </div>
-        <p className="text-gray-400 mt-6 text-sm text-center max-w-2xl">
-          This map shows your live GPS location (blue marker) and saved High Expense Zones (red circles). 
-          If you approach a red zone while low on funds, Stash will automatically warn you.
-        </p>
+        <div className="mt-6 flex max-w-2xl items-center gap-3 text-center text-sm text-gray-400">
+          <RadioTower className="h-5 w-5 shrink-0 text-green-400" />
+          <p>Live GPS plus autonomous Overpass sweeps for restaurants, malls, cafes, and attractions within 2km. Red pulses mark active High Expense Zones.</p>
+        </div>
       </main>
     </div>
   );
