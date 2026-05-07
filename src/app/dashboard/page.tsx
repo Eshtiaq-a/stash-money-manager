@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, Coffee, Car, ShoppingBag, Settings, LayoutDashboard, Clock, Save, Target, Box, Wallet, User, MapPin, AlertTriangle, Navigation, Calendar, Flame } from "lucide-react";
+import { LogOut, Coffee, Car, ShoppingBag, Settings, LayoutDashboard, Save, Box, Wallet, MapPin, AlertTriangle, Navigation, Calendar, Flame } from "lucide-react";
 
 interface Expense {
   id: string;
@@ -14,9 +15,44 @@ interface Expense {
   created_at: string;
 }
 
+interface HighExpenseZone {
+  lat: number;
+  lng: number;
+  timestamp: string;
+}
+
+interface ProviderIdentity {
+  provider?: string;
+  identity_data?: {
+    avatar_url?: string;
+    picture?: string;
+  };
+}
+
+interface StashUserMetadata {
+  avatar_url?: string;
+  currency?: string;
+  daily_limit?: number | string;
+  display_name?: string;
+  flag?: string;
+  full_name?: string;
+  hez_zones?: HighExpenseZone[];
+  last_logged_date?: string;
+  monthly_budget?: number | string;
+  name?: string;
+  picture?: string;
+  provider_avatar_url?: string;
+  streak_count?: number | string;
+}
+
+type StashUser = SupabaseUser & {
+  identities?: ProviderIdentity[];
+  user_metadata: StashUserMetadata;
+};
+
 export default function Dashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<StashUser | null>(null);
   const [activeTab, setActiveTab] = useState<"dashboard" | "settings">("dashboard");
 
   // Settings State
@@ -39,7 +75,6 @@ export default function Dashboard() {
   // Phase 8 States
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [selectedHistoryDate, setSelectedHistoryDate] = useState("");
-  const [uniqueDates, setUniqueDates] = useState<string[]>([]);
 
   const CURRENCY_SYMBOLS: Record<string, string> = {
     BDT: "৳",
@@ -48,37 +83,7 @@ export default function Dashboard() {
     SAR: "﷼"
   };
 
-  useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-        if (!session) {
-          router.push("/auth/signin");
-          return;
-        }
-
-        const u = session.user;
-        setUser(u);
-
-        if (u.user_metadata) {
-          setDisplayName(u.user_metadata.display_name || u.user_metadata.full_name || u.user_metadata.name || "Student");
-          setDailyLimit(Number(u.user_metadata.daily_limit) || 500);
-          setMonthlyBudget(Number(u.user_metadata.monthly_budget) || 15000);
-          setCurrency(u.user_metadata.currency || "৳");
-        }
-
-        await fetchExpenses(u.id);
-      } catch (err) {
-        console.error("Profile fetch error:", err);
-        setLoading(false);
-      }
-    };
-
-    checkUser();
-  }, [router]);
-
-  const fetchExpenses = async (userId: string) => {
+  async function fetchExpenses(userId: string) {
     try {
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -99,7 +104,37 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  useEffect(() => {
+    const checkUser = async () => {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!session) {
+          router.push("/auth/signin");
+          return;
+        }
+
+        const u = session.user as StashUser;
+        setUser(u);
+
+        if (u.user_metadata) {
+          setDisplayName(u.user_metadata.display_name || u.user_metadata.full_name || u.user_metadata.name || "Student");
+          setDailyLimit(Number(u.user_metadata.daily_limit) || 500);
+          setMonthlyBudget(Number(u.user_metadata.monthly_budget) || 15000);
+          setCurrency(u.user_metadata.currency || "৳");
+        }
+
+        await fetchExpenses(u.id);
+      } catch (err) {
+        console.error("Profile fetch error:", err);
+        setLoading(false);
+      }
+    };
+
+    checkUser();
+  }, [router]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -118,7 +153,7 @@ export default function Dashboard() {
     });
 
     if (!error && data.user) {
-      setUser(data.user);
+      setUser(data.user as StashUser);
       alert("Settings saved successfully!");
     }
     setIsSavingSettings(false);
@@ -150,7 +185,7 @@ export default function Dashboard() {
       const { data: updateData } = await supabase.auth.updateUser({
         data: { streak_count: currentStreak, last_logged_date: todayStr }
       });
-      if (updateData?.user) setUser(updateData.user);
+      if (updateData?.user) setUser(updateData.user as StashUser);
     }
 
     const newExpense = {
@@ -204,6 +239,7 @@ export default function Dashboard() {
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
       if (!event.target.files || event.target.files.length === 0) return;
+      if (!user) return;
       setIsUploadingAvatar(true);
       const file = event.target.files[0];
       const compressedBlob = await compressImage(file);
@@ -214,9 +250,10 @@ export default function Dashboard() {
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
       const { data, error } = await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
-      if (!error && data.user) setUser(data.user);
-    } catch (error: any) {
-      alert(`Avatar Upload Error: ${error.message}`);
+      if (!error && data.user) setUser(data.user as StashUser);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown upload error";
+      alert(`Avatar Upload Error: ${message}`);
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -230,7 +267,7 @@ export default function Dashboard() {
         const currentZones = user?.user_metadata?.hez_zones || [];
         const { data, error } = await supabase.auth.updateUser({ data: { hez_zones: [...currentZones, newZone] } });
         if (error) throw error;
-        if (data.user) { setUser(data.user); alert("Marked as High Expense Zone!"); }
+        if (data.user) { setUser(data.user as StashUser); alert("Marked as High Expense Zone!"); }
       } catch (err) {
         console.error("Error marking HEZ:", err);
         alert("Failed to mark location.");
@@ -264,14 +301,13 @@ export default function Dashboard() {
   const budgetPercentage = Math.min((dailySpent / dailyLimit) * 100, 100);
   const monthlyPercentage = monthlyBudget > 0 ? Math.min((monthlySpent / monthlyBudget) * 100, 100) : 0;
 
-  useEffect(() => {
+  const uniqueDates = useMemo(() => {
     const dates = expenses.map(exp => new Date(exp.created_at).toISOString().split('T')[0]);
-    const unique = Array.from(new Set(dates));
-    setUniqueDates(unique);
-    if (!selectedHistoryDate && unique.length > 0) setSelectedHistoryDate(unique[0]);
+    return Array.from(new Set(dates));
   }, [expenses]);
 
-  const filteredHistory = expenses.filter(exp => new Date(exp.created_at).toISOString().split('T')[0] === selectedHistoryDate);
+  const activeHistoryDate = selectedHistoryDate || uniqueDates[0] || "";
+  const filteredHistory = expenses.filter(exp => new Date(exp.created_at).toISOString().split('T')[0] === activeHistoryDate);
   const filteredHistoryTotal = filteredHistory.reduce((sum, exp) => sum + exp.amount, 0);
 
   useEffect(() => {
@@ -286,7 +322,7 @@ export default function Dashboard() {
       watchId = navigator.geolocation.watchPosition((pos) => {
         try {
           const { latitude, longitude } = pos.coords;
-          hezZones.forEach((zone: any) => {
+          hezZones.forEach((zone) => {
             const R = 6371e3;
             const p1 = latitude * Math.PI / 180;
             const p2 = zone.lat * Math.PI / 180;
@@ -307,9 +343,14 @@ export default function Dashboard() {
   }, [dailySpent, dailyLimit, user]);
 
   const flag = user?.user_metadata?.flag || "";
-  const avatarUrl = user?.user_metadata?.avatar_url;
+  const avatarUrl =
+    user?.user_metadata?.avatar_url ||
+    user?.user_metadata?.picture ||
+    user?.user_metadata?.provider_avatar_url ||
+    user?.identities?.find((identity) => identity.provider === "google" || identity.provider === "github")?.identity_data?.avatar_url ||
+    user?.identities?.find((identity) => identity.provider === "google" || identity.provider === "github")?.identity_data?.picture;
   const hezZones = user?.user_metadata?.hez_zones || [];
-  const streakCount = user?.user_metadata?.streak_count || 0;
+  const streakCount = Number(user?.user_metadata?.streak_count) || 0;
 
   if (loading) {
     return (
@@ -392,11 +433,13 @@ export default function Dashboard() {
                 title="Change Profile Picture"
                 aria-label="Upload Profile Picture"
               />
-              <div className="w-20 h-20 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center overflow-hidden group-hover:border-blue-500 transition-colors shadow-lg">
+              <div className="w-20 h-20 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center overflow-hidden group-hover:border-green-500 transition-colors shadow-lg">
                 {avatarUrl ? (
                   <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
-                  <User className="w-10 h-10 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                  <div className="flex h-full w-full items-center justify-center bg-[#1f2f24] text-2xl font-black tracking-widest text-green-300">
+                    S
+                  </div>
                 )}
               </div>
               {isUploadingAvatar && (
@@ -425,7 +468,7 @@ export default function Dashboard() {
                   <Wallet className="w-10 h-10 text-blue-400" />
                 </div>
                 <div className="w-full flex-1">
-                  <h2 className="text-lg text-blue-500 font-bold uppercase tracking-widest mb-1">Today's Daily Budget</h2>
+                  <h2 className="text-lg text-blue-500 font-bold uppercase tracking-widest mb-1">Today&apos;s Daily Budget</h2>
                   <div className="flex items-baseline gap-2 mb-3">
                     <span className="text-6xl md:text-7xl font-black text-white">{currency}{dailySpent.toLocaleString()}</span>
                     <span className="text-blue-400/80 font-medium text-xl">/ {currency}{dailyLimit}</span>
@@ -650,7 +693,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center gap-3">
                     <select
-                      value={selectedHistoryDate}
+                      value={activeHistoryDate}
                       onChange={(e) => setSelectedHistoryDate(e.target.value)}
                       className="bg-[#0d1117] border border-gray-700 text-white text-sm rounded-lg py-2 px-3 focus:outline-none focus:border-blue-500"
                     >
@@ -664,7 +707,7 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {selectedHistoryDate && (
+                {activeHistoryDate && (
                   <div className="bg-blue-500/5 px-8 py-4 border-b border-gray-800 flex justify-between items-center">
                     <span className="text-gray-400 font-medium">Daily Total</span>
                     <span className="text-white font-bold text-xl">{currency}{filteredHistoryTotal.toLocaleString()}</span>

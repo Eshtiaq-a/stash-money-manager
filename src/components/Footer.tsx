@@ -7,20 +7,29 @@ export default function Footer() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toast, setToast] = useState("");
+  const [error, setError] = useState("");
 
-  const handleFeedbackSubmit = () => {
+  const handleFeedbackSubmit = async () => {
     if (!message.trim()) return;
     setIsSubmitting(true);
-    
-    const subject = encodeURIComponent("Stash App Bug Report / Feedback");
-    const body = encodeURIComponent(message);
-    
-    // This will open the user's default email client
-    window.location.href = `mailto:eshtiaqahmad27@gmail.com?subject=${subject}&body=${body}`;
+    setError("");
+
+    const { error: feedbackError } = await supabase
+      .from("feedback")
+      .insert({ message: message.trim() });
+
+    if (feedbackError) {
+      setError(feedbackError.message || "Unable to send feedback right now.");
+      setIsSubmitting(false);
+      return;
+    }
 
     setIsSubmitting(false);
     setIsModalOpen(false);
     setMessage("");
+    setToast("Message Received");
+    window.setTimeout(() => setToast(""), 3000);
   };
 
   return (
@@ -82,6 +91,11 @@ export default function Footer() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div className="bg-[#161b22] border border-gray-800 p-6 rounded-2xl w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-4">Send Feedback</h2>
+            {error && (
+              <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">
+                {error}
+              </div>
+            )}
             <label htmlFor="feedbackMessage" className="sr-only">Feedback Message</label>
             <textarea
               id="feedbackMessage"
@@ -93,7 +107,10 @@ export default function Footer() {
             />
             <div className="flex gap-3 justify-end">
               <button 
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setError("");
+                }}
                 className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
               >
                 Cancel
@@ -107,6 +124,12 @@ export default function Footer() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 rounded-lg border border-green-500/30 bg-[#123020] px-5 py-3 text-sm font-semibold text-green-100 shadow-2xl">
+          {toast}
         </div>
       )}
     </>

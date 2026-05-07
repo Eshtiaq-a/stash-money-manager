@@ -6,9 +6,15 @@ import { MapContainer, TileLayer, Marker, Circle, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
+interface HighExpenseZone {
+  lat: number;
+  lng: number;
+  timestamp: string;
+}
+
 // Fix default Leaflet icon paths in Next.js
 if (typeof window !== "undefined") {
-  delete (L.Icon.Default.prototype as any)._getIconUrl;
+  delete (L.Icon.Default.prototype as L.Icon.Default & { _getIconUrl?: unknown })._getIconUrl;
   L.Icon.Default.mergeOptions({
     iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
     iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
@@ -18,7 +24,7 @@ if (typeof window !== "undefined") {
 
 export default function MapComponent() {
   const [position, setPosition] = useState<[number, number] | null>(null);
-  const [hezZones, setHezZones] = useState<any[]>([]);
+  const [hezZones, setHezZones] = useState<HighExpenseZone[]>([]);
 
   useEffect(() => {
     // Get user zones

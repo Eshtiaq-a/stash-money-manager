@@ -5,21 +5,28 @@ import { Wallet, Shield, PieChart, Target, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 export default function LandingPage() {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://stash-saver.vercel.app";
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
       {
         "@type": "Organization",
         "name": "Stash",
-        "url": "https://stash-saver.vercel.app",
-        "logo": "https://stash-saver.vercel.app/icon.png"
+        "url": siteUrl,
+        "logo": `${siteUrl}/stash-icon.svg`
       },
       {
-        "@type": "SoftwareApplication",
+        "@type": "WebSite",
+        "name": "Stash",
+        "url": siteUrl
+      },
+      {
+        "@type": "WebApplication",
         "name": "Stash",
         "applicationCategory": "FinanceApplication",
         "operatingSystem": "Any",
         "description": "Tactical financial awareness for students.",
+        "url": siteUrl,
         "offers": {
           "@type": "Offer",
           "price": "0"

@@ -1,22 +1,26 @@
-import { MetadataRoute } from "next";
+import type { MetadataRoute } from "next";
+
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://stash-saver.vercel.app";
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const lastModified = new Date();
+
   return [
     {
-      url: "https://stash-saver.vercel.app",
-      lastModified: new Date(),
+      url: siteUrl,
+      lastModified,
       changeFrequency: "weekly",
       priority: 1,
     },
     {
-      url: "https://stash-saver.vercel.app/auth/signin",
-      lastModified: new Date(),
+      url: `${siteUrl}/auth/signin`,
+      lastModified,
       changeFrequency: "monthly",
       priority: 0.8,
     },
     {
-      url: "https://stash-saver.vercel.app/auth/signup",
-      lastModified: new Date(),
+      url: `${siteUrl}/auth/signup`,
+      lastModified,
       changeFrequency: "monthly",
       priority: 0.8,
     },
