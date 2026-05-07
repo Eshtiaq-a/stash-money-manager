@@ -5,7 +5,10 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 // Dynamically import the map component to avoid SSR window errors
-const MapComponent = dynamic(() => import("./MapComponent"), { ssr: false });
+const MapComponent = dynamic(() => import("./MapComponent"), { 
+  ssr: false,
+  loading: () => <div className="w-full h-full flex items-center justify-center text-gray-400 font-medium">Loading Tactical Map...</div>
+});
 
 export default function MapPage() {
   return (

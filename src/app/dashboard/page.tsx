@@ -50,44 +50,55 @@ export default function Dashboard() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/auth/signin");
-        return;
-      }
-      
-      const u = session.user;
-      setUser(u);
-      
-      // Load settings from metadata
-      if (u.user_metadata) {
-        setDisplayName(u.user_metadata.display_name || u.user_metadata.full_name || u.user_metadata.name || "Student");
-        setDailyLimit(Number(u.user_metadata.daily_limit) || 500);
-        setMonthlyBudget(Number(u.user_metadata.monthly_budget) || 15000);
-        setCurrency(u.user_metadata.currency || "৳");
-      }
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!session) {
+          router.push("/auth/signin");
+          return;
+        }
+        
+        const u = session.user;
+        setUser(u);
+        
+        if (u.user_metadata) {
+          setDisplayName(u.user_metadata.display_name || u.user_metadata.full_name || u.user_metadata.name || "Student");
+          setDailyLimit(Number(u.user_metadata.daily_limit) || 500);
+          setMonthlyBudget(Number(u.user_metadata.monthly_budget) || 15000);
+          setCurrency(u.user_metadata.currency || "৳");
+        }
 
-      fetchExpenses(u.id);
+        await fetchExpenses(u.id);
+      } catch (err) {
+        console.error("Profile fetch error:", err);
+        setLoading(false);
+      }
     };
 
     checkUser();
   }, [router]);
 
   const fetchExpenses = async (userId: string) => {
-    const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    try {
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const { data, error } = await supabase
-      .from('expenses')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('created_at', firstDayOfMonth.toISOString())
-      .order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('created_at', firstDayOfMonth.toISOString())
+        .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      setExpenses(data);
+      if (error) throw error;
+      if (data) {
+        setExpenses(data);
+      }
+    } catch (err) {
+      console.error("Transaction fetch error:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSignOut = async () => {
@@ -138,9 +149,7 @@ export default function Dashboard() {
     }
   };
 
-  if (loading) {
-    return <div className="min-h-screen bg-[#0d1117] flex items-center justify-center text-white font-sans">Loading Stash...</div>;
-  }
+  // Loading state moved to bottom to prevent Hook rule violations
 
   const compressImage = (file: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
@@ -189,12 +198,18 @@ export default function Dashboard() {
   };
 
   const markCurrentLocationAsHEZ = () => {
-    if (!navigator.geolocation) return alert("Geolocation not supported");
+    if (typeof window === 'undefined' || !('navigator' in window) || !navigator.geolocation) return alert("Geolocation not supported");
     navigator.geolocation.getCurrentPosition(async (pos) => {
-      const newZone = { lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: new Date().toISOString() };
-      const currentZones = user?.user_metadata?.hez_zones || [];
-      const { data, error } = await supabase.auth.updateUser({ data: { hez_zones: [...currentZones, newZone] } });
-      if (!error && data.user) { setUser(data.user); alert("Marked as High Expense Zone!"); }
+      try {
+        const newZone = { lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: new Date().toISOString() };
+        const currentZones = user?.user_metadata?.hez_zones || [];
+        const { data, error } = await supabase.auth.updateUser({ data: { hez_zones: [...currentZones, newZone] } });
+        if (error) throw error;
+        if (data.user) { setUser(data.user); alert("Marked as High Expense Zone!"); }
+      } catch (err) {
+        console.error("Error marking HEZ:", err);
+        alert("Failed to mark location.");
+      }
     });
   };
 
@@ -235,27 +250,33 @@ export default function Dashboard() {
   const filteredHistoryTotal = filteredHistory.reduce((sum, exp) => sum + exp.amount, 0);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !('navigator' in window) || !navigator.geolocation) return;
+
     let watchId: number;
     const isLowFunds = dailySpent / dailyLimit > 0.6;
     const hezZones = user?.user_metadata?.hez_zones || [];
     
-    if (isLowFunds && navigator.geolocation && hezZones.length > 0) {
+    if (isLowFunds && hezZones.length > 0) {
       if (Notification.permission === 'default') Notification.requestPermission();
       watchId = navigator.geolocation.watchPosition((pos) => {
-        const { latitude, longitude } = pos.coords;
-        hezZones.forEach((zone: any) => {
-          const R = 6371e3;
-          const p1 = latitude * Math.PI/180;
-          const p2 = zone.lat * Math.PI/180;
-          const dp = (zone.lat-latitude) * Math.PI/180;
-          const dl = (zone.lng-longitude) * Math.PI/180;
-          const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
-          const dist = R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
-          if (dist < 500 && Notification.permission === 'granted') {
-            new Notification('⚠️ Warning: Entering a High Expense Zone with low funds.');
-          }
-        });
-      }, (err) => console.error(err), { enableHighAccuracy: true });
+        try {
+          const { latitude, longitude } = pos.coords;
+          hezZones.forEach((zone: any) => {
+            const R = 6371e3;
+            const p1 = latitude * Math.PI/180;
+            const p2 = zone.lat * Math.PI/180;
+            const dp = (zone.lat-latitude) * Math.PI/180;
+            const dl = (zone.lng-longitude) * Math.PI/180;
+            const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+            const dist = R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+            if (dist < 500 && Notification.permission === 'granted') {
+              new Notification('⚠️ Warning: Entering a High Expense Zone with low funds.');
+            }
+          });
+        } catch (err) {
+          console.error("GPS Watch error:", err);
+        }
+      }, (err) => console.error("GPS Position Error:", err), { enableHighAccuracy: true });
     }
     return () => { if (watchId) navigator.geolocation.clearWatch(watchId); };
   }, [dailySpent, dailyLimit, user]);
@@ -263,6 +284,10 @@ export default function Dashboard() {
   const flag = user?.user_metadata?.flag || "";
   const avatarUrl = user?.user_metadata?.avatar_url;
   const hezZones = user?.user_metadata?.hez_zones || [];
+
+  if (loading) {
+    return <div className="min-h-screen bg-[#0d1117] flex items-center justify-center text-white font-sans">Loading Stash...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-200 font-sans selection:bg-blue-500/30">

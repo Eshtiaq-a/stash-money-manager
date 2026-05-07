@@ -8,26 +8,19 @@ export default function Footer() {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleFeedbackSubmit = async () => {
+  const handleFeedbackSubmit = () => {
     if (!message.trim()) return;
     setIsSubmitting(true);
     
-    const { data: { session } } = await supabase.auth.getSession();
+    const subject = encodeURIComponent("Stash App Bug Report / Feedback");
+    const body = encodeURIComponent(message);
     
-    // We attempt to insert into 'feedback' table. If it fails, we catch it.
-    const { error } = await supabase.from('feedback').insert([
-      { user_id: session?.user?.id || null, message }
-    ]);
+    // This will open the user's default email client
+    window.location.href = `mailto:eshtiaqahmad27@gmail.com?subject=${subject}&body=${body}`;
 
     setIsSubmitting(false);
-    if (!error) {
-      alert("Thank you for your feedback!");
-      setIsModalOpen(false);
-      setMessage("");
-    } else {
-      console.error(error);
-      alert("Error submitting feedback. Ensure 'feedback' table exists.");
-    }
+    setIsModalOpen(false);
+    setMessage("");
   };
 
   return (
@@ -69,12 +62,15 @@ export default function Footer() {
 
           {/* Column 4: Dev Info */}
           <div className="flex flex-col gap-2 md:items-end md:text-right">
-            <h4 className="font-semibold text-white mb-2">Developer</h4>
-            <p className="text-gray-500 text-sm">
-              Built by Eshtiaq
+            <h4 className="font-semibold text-white mb-2">Lead Developer</h4>
+            <p className="text-gray-400 text-sm font-medium">
+              Eshtiaq Ahmad
             </p>
             <p className="text-gray-500 text-xs">
-              ICT Specialist, Bangladesh
+              Department of Software Engineering
+            </p>
+            <p className="text-gray-500 text-xs">
+              Daffodil International University
             </p>
           </div>
 
