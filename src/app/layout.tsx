@@ -5,9 +5,11 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
 
+import Footer from "@/components/Footer";
+
 export const metadata: Metadata = {
-  title: "Antigravity Finance | Gamified Spending",
-  description: "Experience the future of personal finance. Manage your money in zero gravity.",
+  title: "Stash | Smart Student Budgeting",
+  description: "Tactical financial awareness for students.",
 };
 
 export default function RootLayout({
@@ -17,8 +19,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased dark`}>
-      <body className="min-h-full flex flex-col font-sans bg-[#050510] text-[#e0e0f8]">
+      <body className="min-h-full flex flex-col font-sans bg-[#0d1117] text-[#e0e0f8]">
         {children}
+        <Footer />
       </body>
     </html>
   );

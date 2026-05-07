@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, Coffee, Car, ShoppingBag, Settings, LayoutDashboard, Clock, Save, Target, Box, Wallet } from "lucide-react";
+import { LogOut, Coffee, Car, ShoppingBag, Settings, LayoutDashboard, Clock, Save, Target, Box, Wallet, User, MapPin, AlertTriangle, Navigation, Calendar } from "lucide-react";
 
 interface Expense {
   id: string;
@@ -34,7 +34,12 @@ export default function Dashboard() {
   const [foodAmount, setFoodAmount] = useState("");
   const [transportAmount, setTransportAmount] = useState("");
   const [shoppingAmount, setShoppingAmount] = useState("");
-  const [otherAmount, setOtherAmount] = useState(""); // Add Other
+  const [otherAmount, setOtherAmount] = useState("");
+
+  // Phase 8 States
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [selectedHistoryDate, setSelectedHistoryDate] = useState("");
+  const [uniqueDates, setUniqueDates] = useState<string[]>([]);
 
   const CURRENCY_SYMBOLS: Record<string, string> = {
     BDT: "৳",
@@ -137,19 +142,127 @@ export default function Dashboard() {
     return <div className="min-h-screen bg-[#0d1117] flex items-center justify-center text-white font-sans">Loading Stash...</div>;
   }
 
+  const compressImage = (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          if (width > 400) { height = Math.round(height * 400 / width); width = 400; }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Compression failed"));
+          }, 'image/jpeg', 0.7);
+        };
+      };
+    });
+  };
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      if (!event.target.files || event.target.files.length === 0) return;
+      setIsUploadingAvatar(true);
+      const file = event.target.files[0];
+      const compressedBlob = await compressImage(file);
+      const fileName = `${user.id}-avatar-${Date.now()}.jpg`;
+
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, compressedBlob, { contentType: 'image/jpeg', upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+      const { data, error } = await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
+      if (!error && data.user) setUser(data.user);
+    } catch (error: any) {
+      alert(`Avatar Upload Error: ${error.message}`);
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const markCurrentLocationAsHEZ = () => {
+    if (!navigator.geolocation) return alert("Geolocation not supported");
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const newZone = { lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: new Date().toISOString() };
+      const currentZones = user?.user_metadata?.hez_zones || [];
+      const { data, error } = await supabase.auth.updateUser({ data: { hez_zones: [...currentZones, newZone] } });
+      if (!error && data.user) { setUser(data.user); alert("Marked as High Expense Zone!"); }
+    });
+  };
+
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const resetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+  if (now.getTime() < resetTime.getTime()) resetTime.setDate(resetTime.getDate() - 1);
+  const todayStart = resetTime.getTime();
   
   const dailyExpenses = expenses.filter(exp => new Date(exp.created_at).getTime() >= todayStart);
   
   const dailySpent = dailyExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   const monthlySpent = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
-  const stashPoints = Math.max(0, dailyLimit - dailySpent);
+  // Calculate Stash Points: Only award points for days where the user actively logged expenses.
+  const expensesByDate = expenses.reduce((acc, exp) => {
+    // Format date carefully to handle the 12 PM reset logic if needed, 
+    // but a simple ISO string split works well for grouping by calendar day.
+    const d = new Date(new Date(exp.created_at).getTime() - (12 * 60 * 60 * 1000)).toISOString().split('T')[0];
+    acc[d] = (acc[d] || 0) + exp.amount;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const stashPoints = Object.values(expensesByDate).reduce((total, dailyAmount) => {
+    return total + Math.max(0, dailyLimit - dailyAmount);
+  }, 0);
+
   const budgetPercentage = Math.min((dailySpent / dailyLimit) * 100, 100);
   const monthlyPercentage = monthlyBudget > 0 ? Math.min((monthlySpent / monthlyBudget) * 100, 100) : 0;
 
+  useEffect(() => {
+    const dates = expenses.map(exp => new Date(exp.created_at).toISOString().split('T')[0]);
+    const unique = Array.from(new Set(dates));
+    setUniqueDates(unique);
+    if (!selectedHistoryDate && unique.length > 0) setSelectedHistoryDate(unique[0]);
+  }, [expenses]);
+
+  const filteredHistory = expenses.filter(exp => new Date(exp.created_at).toISOString().split('T')[0] === selectedHistoryDate);
+  const filteredHistoryTotal = filteredHistory.reduce((sum, exp) => sum + exp.amount, 0);
+
+  useEffect(() => {
+    let watchId: number;
+    const isLowFunds = dailySpent / dailyLimit > 0.6;
+    const hezZones = user?.user_metadata?.hez_zones || [];
+    
+    if (isLowFunds && navigator.geolocation && hezZones.length > 0) {
+      if (Notification.permission === 'default') Notification.requestPermission();
+      watchId = navigator.geolocation.watchPosition((pos) => {
+        const { latitude, longitude } = pos.coords;
+        hezZones.forEach((zone: any) => {
+          const R = 6371e3;
+          const p1 = latitude * Math.PI/180;
+          const p2 = zone.lat * Math.PI/180;
+          const dp = (zone.lat-latitude) * Math.PI/180;
+          const dl = (zone.lng-longitude) * Math.PI/180;
+          const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+          const dist = R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+          if (dist < 500 && Notification.permission === 'granted') {
+            new Notification('⚠️ Warning: Entering a High Expense Zone with low funds.');
+          }
+        });
+      }, (err) => console.error(err), { enableHighAccuracy: true });
+    }
+    return () => { if (watchId) navigator.geolocation.clearWatch(watchId); };
+  }, [dailySpent, dailyLimit, user]);
+
   const flag = user?.user_metadata?.flag || "";
+  const avatarUrl = user?.user_metadata?.avatar_url;
+  const hezZones = user?.user_metadata?.hez_zones || [];
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-200 font-sans selection:bg-blue-500/30">
@@ -186,13 +299,36 @@ export default function Dashboard() {
       <main className="max-w-6xl mx-auto px-6 py-8">
         
         {/* User Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-            Welcome back, {displayName} <span className="text-2xl">{flag}</span>
-          </h1>
-          <p className="text-gray-400 mt-1">
-            Track your expenses and grow your Stash Points.
-          </p>
+        <div className="mb-8 flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+              Welcome back, {displayName} <span className="text-2xl">{flag}</span>
+            </h1>
+            <p className="text-gray-400 mt-1">
+              Track your expenses and grow your Stash Points.
+            </p>
+          </div>
+          <div className="relative group">
+            <input 
+              type="file" 
+              accept="image/*" 
+              className="absolute inset-0 opacity-0 cursor-pointer z-10"
+              onChange={handleAvatarUpload}
+              title="Change Profile Picture"
+            />
+            <div className="w-14 h-14 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center overflow-hidden group-hover:border-blue-500 transition-colors">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <User className="w-6 h-6 text-gray-400 group-hover:text-blue-500 transition-colors" />
+              )}
+            </div>
+            {isUploadingAvatar && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              </div>
+            )}
+          </div>
         </div>
 
         <AnimatePresence mode="wait">
@@ -235,7 +371,7 @@ export default function Dashboard() {
               </div>
 
               {/* Top Overview Cards */}
-              <div className="grid md:grid-cols-2 gap-6">
+              <div className="grid md:grid-cols-3 gap-6">
                 
                 {/* Stash Points Card */}
                 <div className="bg-[#161b22] border-2 border-green-500/30 p-8 rounded-3xl shadow-lg relative overflow-hidden">
@@ -247,7 +383,7 @@ export default function Dashboard() {
                       <span className="text-green-500 font-bold">pts</span>
                     </div>
                   </div>
-                  <p className="text-sm text-gray-500 mt-2">1:1 ratio for every {currency} saved below today's limit.</p>
+                  <p className="text-sm text-gray-500 mt-2">1:1 ratio for savings.</p>
                 </div>
 
                 {/* Monthly Budget Card */}
@@ -259,9 +395,9 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div className="flex items-baseline gap-2 mb-6">
-                    <span className="text-5xl font-bold text-white">{currency}{monthlySpent.toLocaleString()}</span>
-                    <span className="text-xl text-gray-500 font-medium">/ {currency}{monthlyBudget.toLocaleString()}</span>
+                    <span className="text-4xl font-bold text-white">{currency}{monthlySpent.toLocaleString()}</span>
                   </div>
+                  <div className="text-sm text-gray-500 font-medium mb-3">Limit: {currency}{monthlyBudget.toLocaleString()}</div>
                   <div className="h-3 w-full bg-gray-900 rounded-full overflow-hidden shadow-inner border border-gray-800">
                     <motion.div 
                       initial={{ width: 0 }}
@@ -273,7 +409,27 @@ export default function Dashboard() {
                       }`}
                     />
                   </div>
-                  <p className="text-sm text-gray-500 mt-4">Adjust this baseline in your Settings tab.</p>
+                </div>
+
+                {/* HEZ Radar Card */}
+                <div className="bg-[#161b22] border-2 border-red-500/30 p-8 rounded-3xl shadow-lg relative overflow-hidden flex flex-col justify-between">
+                  <div className="absolute -right-6 -top-6 w-32 h-32 bg-red-500/10 rounded-full blur-2xl"></div>
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-400 mb-2 flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-red-500" />
+                      HEZ Radar
+                    </h3>
+                    <div className="text-4xl font-bold text-white mb-2">{hezZones.length}</div>
+                    <p className="text-sm text-gray-500">Active High Expense Zones</p>
+                  </div>
+                  <div className="mt-4 flex flex-col gap-2 relative z-10">
+                    <Link href="/map" className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-500 py-2 rounded-lg text-center text-sm font-medium transition-colors border border-red-500/20 flex items-center justify-center gap-2">
+                      <MapPin className="w-4 h-4" /> Open Tactical Map
+                    </Link>
+                    <button onClick={markCurrentLocationAsHEZ} className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded-lg text-center text-sm font-medium transition-colors border border-gray-700 flex items-center justify-center gap-2">
+                      <Navigation className="w-4 h-4" /> Mark Current Loc
+                    </button>
+                  </div>
                 </div>
 
               </div>
@@ -398,20 +554,43 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Transaction History */}
+              {/* Transaction History Archive */}
               <div className="bg-[#161b22] border border-gray-800 rounded-3xl overflow-hidden">
-                <div className="p-8 border-b border-gray-800 flex items-center gap-3">
-                  <Clock className="w-6 h-6 text-gray-400" />
-                  <h2 className="text-xl font-bold text-white">Transaction History</h2>
+                <div className="p-8 border-b border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Calendar className="w-6 h-6 text-blue-500" />
+                    <h2 className="text-xl font-bold text-white">Historical Transaction Archive</h2>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <select 
+                      value={selectedHistoryDate}
+                      onChange={(e) => setSelectedHistoryDate(e.target.value)}
+                      className="bg-[#0d1117] border border-gray-700 text-white text-sm rounded-lg py-2 px-3 focus:outline-none focus:border-blue-500"
+                    >
+                      {uniqueDates.length === 0 && <option value="">No history</option>}
+                      {uniqueDates.map(date => (
+                        <option key={date} value={date}>
+                          {new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
+
+                {selectedHistoryDate && (
+                  <div className="bg-blue-500/5 px-8 py-4 border-b border-gray-800 flex justify-between items-center">
+                    <span className="text-gray-400 font-medium">Daily Total</span>
+                    <span className="text-white font-bold text-xl">{currency}{filteredHistoryTotal.toLocaleString()}</span>
+                  </div>
+                )}
                 
-                <div className="divide-y divide-gray-800">
-                  {dailyExpenses.length === 0 ? (
+                <div className="divide-y divide-gray-800 max-h-[500px] overflow-y-auto">
+                  {filteredHistory.length === 0 ? (
                     <div className="p-12 text-center text-gray-500 font-medium">
-                      No logs for today yet. Use the Quick Log cards above to add an expense.
+                      No logs for this date.
                     </div>
                   ) : (
-                    dailyExpenses.map((exp) => (
+                    filteredHistory.map((exp) => (
                       <div key={exp.id} className="p-5 px-8 flex items-center justify-between hover:bg-gray-800/30 transition-colors">
                         <div className="flex items-center gap-5">
                           <div className={`p-3 rounded-full ${

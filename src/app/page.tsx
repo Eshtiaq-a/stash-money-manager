@@ -18,7 +18,7 @@ export default function LandingPage() {
               Stash
             </span>
           </Link>
-          
+
           <div className="flex items-center gap-4">
             <Link href="/auth/signin">
               <button className="px-5 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors">
@@ -37,8 +37,8 @@ export default function LandingPage() {
       {/* Hero Section */}
       <main className="max-w-7xl mx-auto px-6 pt-20 pb-32">
         <div className="grid lg:grid-cols-2 gap-16 items-center">
-          
-          <motion.div 
+
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
@@ -51,11 +51,11 @@ export default function LandingPage() {
               </span>
               Smart budgeting for students
             </div>
-            
+
             <h1 className="text-5xl md:text-6xl font-extrabold text-white leading-tight">
               Master your <span className="text-blue-500">finances</span> without the stress.
             </h1>
-            
+
             <p className="text-lg text-gray-400 max-w-xl leading-relaxed">
               Stash makes money management simple. Track daily expenses, stay within your budgets, and earn Stash Points for every smart financial decision you make.
             </p>
@@ -70,7 +70,7 @@ export default function LandingPage() {
           </motion.div>
 
           {/* Cards Display */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.8, delay: 0.2 }}
@@ -78,9 +78,9 @@ export default function LandingPage() {
           >
             {/* Background elements */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-blue-600/10 blur-[100px] rounded-full"></div>
-            
+
             {/* Card 1 */}
-            <motion.div 
+            <motion.div
               animate={{ y: [-10, 10, -10] }}
               transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
               className="absolute top-10 right-10 w-64 p-5 rounded-xl bg-[#161b22] border border-gray-800 shadow-xl z-20"
@@ -106,7 +106,7 @@ export default function LandingPage() {
             </motion.div>
 
             {/* Card 2 */}
-            <motion.div 
+            <motion.div
               animate={{ y: [10, -10, 10] }}
               transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
               className="absolute bottom-20 left-0 w-72 p-5 rounded-xl bg-[#161b22] border border-gray-800 shadow-xl z-30"
@@ -130,7 +130,7 @@ export default function LandingPage() {
             </motion.div>
 
             {/* Card 3 */}
-            <motion.div 
+            <motion.div
               animate={{ y: [-5, 5, -5] }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 2 }}
               className="absolute top-1/2 -right-4 w-48 p-4 rounded-xl bg-[#161b22] border border-gray-800 shadow-xl z-10"
@@ -154,7 +154,7 @@ export default function LandingPage() {
             <h2 className="text-3xl font-bold text-white mb-4">Core Features</h2>
             <p className="text-gray-400 max-w-2xl mx-auto">Everything you need to keep your student budget in check.</p>
           </div>
-          
+
           <div className="grid md:grid-cols-3 gap-8">
             <div className="p-6 rounded-xl bg-[#161b22] border border-gray-800 hover:border-gray-700 transition-colors">
               <div className="w-12 h-12 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center mb-4">
@@ -165,7 +165,7 @@ export default function LandingPage() {
                 Log expenses in seconds with categorized one-tap inputs for Food, Transport, and Shopping.
               </p>
             </div>
-            
+
             <div className="p-6 rounded-xl bg-[#161b22] border border-gray-800 hover:border-gray-700 transition-colors">
               <div className="w-12 h-12 bg-green-500/10 text-green-500 rounded-xl flex items-center justify-center mb-4">
                 <Shield className="w-6 h-6" />
