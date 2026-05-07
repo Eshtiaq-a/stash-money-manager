@@ -406,6 +406,7 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+      </div>
 
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && (
