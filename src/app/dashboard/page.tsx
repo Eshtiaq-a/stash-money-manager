@@ -86,14 +86,14 @@ function getOperationalDate(date = new Date()) {
 }
 
 const TIER_LIST = [
-  { min: 25000, label: "Legendary",  emoji: "👑", color: "from-yellow-400 to-amber-500",  border: "border-yellow-400/60", bg: "bg-yellow-400/10", text: "text-yellow-300" },
-  { min: 15000, label: "Mythic",     emoji: "💎", color: "from-purple-400 to-pink-500",   border: "border-purple-400/60", bg: "bg-purple-400/10", text: "text-purple-300" },
-  { min: 10000, label: "Grandmaster",emoji: "🔥", color: "from-red-400 to-orange-500",    border: "border-red-400/60",    bg: "bg-red-400/10",    text: "text-red-300" },
-  { min: 5000,  label: "Master",     emoji: "⚡", color: "from-emerald-400 to-teal-500",  border: "border-emerald-400/60",bg: "bg-emerald-400/10",text: "text-emerald-300" },
-  { min: 2500,  label: "Diamond",    emoji: "💠", color: "from-cyan-400 to-blue-500",     border: "border-cyan-400/60",   bg: "bg-cyan-400/10",   text: "text-cyan-300" },
-  { min: 1000,  label: "Gold",       emoji: "🥇", color: "from-amber-400 to-yellow-500",  border: "border-amber-400/60",  bg: "bg-amber-400/10",  text: "text-amber-300" },
-  { min: 250,   label: "Silver",     emoji: "🥈", color: "from-slate-300 to-slate-400",   border: "border-slate-400/60",  bg: "bg-slate-400/10",  text: "text-slate-300" },
-  { min: 0,     label: "Bronze",     emoji: "🥉", color: "from-orange-300 to-amber-400",  border: "border-orange-400/60", bg: "bg-orange-400/10", text: "text-orange-300" },
+  { min: 25000, label: "Legendary", emoji: "👑", color: "from-yellow-400 to-amber-500", border: "border-yellow-400/60", bg: "bg-yellow-400/10", text: "text-yellow-300" },
+  { min: 15000, label: "Mythic", emoji: "💎", color: "from-purple-400 to-pink-500", border: "border-purple-400/60", bg: "bg-purple-400/10", text: "text-purple-300" },
+  { min: 10000, label: "Grandmaster", emoji: "🔥", color: "from-red-400 to-orange-500", border: "border-red-400/60", bg: "bg-red-400/10", text: "text-red-300" },
+  { min: 5000, label: "Master", emoji: "⚡", color: "from-emerald-400 to-teal-500", border: "border-emerald-400/60", bg: "bg-emerald-400/10", text: "text-emerald-300" },
+  { min: 2500, label: "Diamond", emoji: "💠", color: "from-cyan-400 to-blue-500", border: "border-cyan-400/60", bg: "bg-cyan-400/10", text: "text-cyan-300" },
+  { min: 1000, label: "Gold", emoji: "🥇", color: "from-amber-400 to-yellow-500", border: "border-amber-400/60", bg: "bg-amber-400/10", text: "text-amber-300" },
+  { min: 250, label: "Silver", emoji: "🥈", color: "from-slate-300 to-slate-400", border: "border-slate-400/60", bg: "bg-slate-400/10", text: "text-slate-300" },
+  { min: 0, label: "Bronze", emoji: "🥉", color: "from-orange-300 to-amber-400", border: "border-orange-400/60", bg: "bg-orange-400/10", text: "text-orange-300" },
 ];
 
 function getRankBadge(points: number) {
@@ -184,6 +184,7 @@ export default function Dashboard() {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
+      .gt("total_points", 0)
       .order("total_points", { ascending: false })
       .limit(10);
 
@@ -206,17 +207,22 @@ export default function Dashboard() {
       return;
     }
 
+    // Current user not in top 10 — calculate their rank
     const { data: currentProfile } = await supabase
       .from("profiles")
       .select("total_points")
       .eq("id", userId)
       .single();
     const ownPoints = Number(currentProfile?.total_points) || 0;
-    const { count } = await supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .gt("total_points", ownPoints);
-    setCurrentRank((count || 0) + 1);
+    if (ownPoints > 0) {
+      const { count } = await supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .gt("total_points", ownPoints);
+      setCurrentRank((count || 0) + 1);
+    } else {
+      setCurrentRank(null);
+    }
   }, []);
 
   const fetchProfile = useCallback(async (u: StashUser) => {
@@ -227,6 +233,25 @@ export default function Dashboard() {
       .single();
 
     if (error) {
+      // Row doesn't exist yet — auto-create profile for new users
+      if (error.code === 'PGRST116') {
+        const name = u.user_metadata.display_name || u.user_metadata.full_name || u.user_metadata.name || "Student";
+        const avatar = u.user_metadata.avatar_url || u.user_metadata.picture || null;
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        const created = await syncProfile(u.id, {
+          full_name: name,
+          avatar_url: avatar,
+          total_points: Number(u.user_metadata.total_points) || 0,
+          lives: MAX_LIVES,
+          last_lives_reset: currentMonth,
+        });
+        if (created) {
+          setDisplayName(name);
+          setLives(MAX_LIVES);
+          setLastLivesReset(currentMonth);
+        }
+        return created;
+      }
       console.error("Profile table fetch error:", error);
       return null;
     }
@@ -499,7 +524,7 @@ export default function Dashboard() {
   // === Quick Log Handler ===
   const handleQuickLog = async () => {
     if (!quickLogAmount || !user) return;
-    const setter = () => {};
+    const setter = () => { };
     await logExpense(quickLogCategory, quickLogAmount, setter, logDate || undefined);
     setQuickLogAmount("");
     setIsQuickLogOpen(false);
@@ -1057,44 +1082,187 @@ export default function Dashboard() {
 
               </div>
 
+              {/* Quick-Log Section — moved above Leaderboard */}
+              {dashboardMode === 'expense' && <>
+                <div>
+                  <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="w-5 h-5 text-emerald-400" /> Quick Log</h2>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-slate-400 font-medium">Backdate:</label>
+                      <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} max={new Date().toISOString().split('T')[0]} className="input-field py-1.5 px-2.5 text-xs w-auto" />
+                      {logDate && <button onClick={() => setLogDate('')} className="text-xs text-red-400 hover:text-red-300"><X className="w-3.5 h-3.5" /></button>}
+                    </div>
+                  </div>
+                  {logDate && <div className="mb-4 badge badge-blue text-xs"><Calendar className="w-3 h-3" /> Logging for: {new Date(logDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>}
+                  <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+                    {/* Food Card */}
+                    <div className="glass-card p-5">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-lg">🍔</div>
+                        <h3 className="font-semibold text-white text-sm">Food & Dining</h3>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        <div className="relative flex flex-col">
+                          <label htmlFor="foodAmount" className="sr-only">Food Amount</label>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
+                          <input id="foodAmount" type="number" value={foodAmount} onChange={(e) => setFoodAmount(e.target.value)} placeholder="0.00" className="input-field pl-8" aria-label="Enter food expense amount" />
+                        </div>
+                        <button onClick={() => logExpense("Food", foodAmount, setFoodAmount, logDate || undefined)} className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-semibold py-2.5 rounded-xl transition-all border border-emerald-500/15 text-sm" aria-label="Log Food Expense">Log Food</button>
+                      </div>
+                    </div>
+
+                    {/* Transport Card */}
+                    <div className="glass-card p-5">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-lg">🚗</div>
+                        <h3 className="font-semibold text-white text-sm">Transport</h3>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        <div className="relative flex flex-col">
+                          <label htmlFor="transportAmount" className="sr-only">Transport Amount</label>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
+                          <input id="transportAmount" type="number" value={transportAmount} onChange={(e) => setTransportAmount(e.target.value)} placeholder="0.00" className="input-field pl-8" aria-label="Enter transport expense amount" />
+                        </div>
+                        <button onClick={() => logExpense("Transport", transportAmount, setTransportAmount, logDate || undefined)} className="w-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 font-semibold py-2.5 rounded-xl transition-all border border-blue-500/15 text-sm" aria-label="Log Transport Expense">Log Transport</button>
+                      </div>
+                    </div>
+
+                    {/* Shopping Card */}
+                    <div className="glass-card p-5">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-lg">🛍️</div>
+                        <h3 className="font-semibold text-white text-sm">Shopping</h3>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        <div className="relative flex flex-col">
+                          <label htmlFor="shoppingAmount" className="sr-only">Shopping Amount</label>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
+                          <input id="shoppingAmount" type="number" value={shoppingAmount} onChange={(e) => setShoppingAmount(e.target.value)} placeholder="0.00" className="input-field pl-8" aria-label="Enter shopping expense amount" />
+                        </div>
+                        <button onClick={() => logExpense("Shopping", shoppingAmount, setShoppingAmount, logDate || undefined)} className="w-full bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 font-semibold py-2.5 rounded-xl transition-all border border-purple-500/15 text-sm" aria-label="Log Shopping Expense">Log Shopping</button>
+                      </div>
+                    </div>
+
+                    {/* Other Card */}
+                    <div className="glass-card p-5">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-slate-500/10 flex items-center justify-center text-lg">📦</div>
+                        <h3 className="font-semibold text-white text-sm">Other</h3>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
+                          <input type="number" value={otherAmount} onChange={(e) => setOtherAmount(e.target.value)} placeholder="0.00" className="input-field pl-8" />
+                        </div>
+                        <button onClick={() => logExpense("Other", otherAmount, setOtherAmount, logDate || undefined)} className="w-full bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 font-semibold py-2.5 rounded-xl transition-all border border-white/[0.06] text-sm">Log Other</button>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Transaction History */}
+                <div className="glass-card-static overflow-hidden">
+                  <div className="p-6 border-b border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="w-5 h-5 text-blue-400" />
+                      <h2 className="text-lg font-bold text-white">Transaction History</h2>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <select value={activeHistoryDate} onChange={(e) => setSelectedHistoryDate(e.target.value)} className="input-field py-2 px-3 text-sm w-auto">
+                        {uniqueDates.length === 0 && <option value="">No history</option>}
+                        {uniqueDates.map(date => (
+                          <option key={date} value={date}>{new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {activeHistoryDate && (
+                    <div className="bg-blue-500/[0.04] px-6 py-3 border-b border-white/[0.06] flex justify-between items-center">
+                      <span className="text-slate-400 font-medium text-sm">Daily Total</span>
+                      <span className="text-white font-bold text-lg">{currency}{filteredHistoryTotal.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="divide-y divide-white/[0.04] max-h-[400px] overflow-y-auto">
+                    {filteredHistory.length === 0 ? (
+                      <div className="p-12 text-center">
+                        <p className="text-slate-500 font-medium">No transactions for this date</p>
+                        <p className="text-slate-600 text-sm mt-1">Every big fortune starts with one small stash.</p>
+                      </div>
+                    ) : (
+                      filteredHistory.map((exp) => (
+                        <div key={exp.id} className="p-4 px-6 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${exp.category === 'Food' ? 'bg-emerald-500/10' : exp.category === 'Transport' ? 'bg-blue-500/10' : exp.category === 'Shopping' ? 'bg-purple-500/10' : 'bg-slate-500/10'}`}>
+                              {exp.category === 'Food' && '🍔'}
+                              {exp.category === 'Transport' && '🚗'}
+                              {exp.category === 'Shopping' && '🛍️'}
+                              {exp.category === 'Other' && '📦'}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-white text-sm">{exp.category}</p>
+                              <p className="text-xs text-slate-500">{new Date(exp.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            </div>
+                          </div>
+                          <div className="text-white font-bold">-{currency}{exp.amount.toLocaleString()}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </> /* end expense mode */}
+
+              {/* Global Leaderboard */}
               <div id="leaderboard-section" className="glass-card-static overflow-hidden glow-emerald">
                 <div className="flex flex-col gap-3 border-b border-white/[0.06] p-6 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
-                    <RadioTower className="h-5 w-5 text-emerald-400" />
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                      <RadioTower className="h-5 w-5 text-emerald-400" />
+                    </div>
                     <div>
                       <h2 className="text-lg font-bold text-white">Global Leaderboard</h2>
                       <p className="text-xs text-slate-500">Ranked by total Stash Points</p>
                     </div>
                   </div>
-                  <div className="badge badge-emerald">
-                    Your Rank: {currentRank ? `#${currentRank}` : "Scanning"}
+                  <div className={`badge ${currentRank ? 'badge-emerald' : 'badge-orange'}`}>
+                    {currentRank ? `🏆 Your Rank: #${currentRank}` : "⏳ Unranked — earn points to rank up!"}
                   </div>
                 </div>
                 <div className="divide-y divide-white/[0.04]">
                   {leaderboardError ? (
-                    <div className="p-6 text-sm text-yellow-400">{leaderboardError}</div>
+                    <div className="p-6 text-sm text-yellow-400 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" /> {leaderboardError}
+                    </div>
                   ) : leaderboard.length === 0 ? (
-                    <div className="p-6 text-sm text-slate-500">No leaderboard data yet.</div>
+                    <div className="p-10 text-center">
+                      <div className="text-4xl mb-3">🏆</div>
+                      <p className="text-slate-400 font-semibold mb-1">The leaderboard is empty</p>
+                      <p className="text-slate-600 text-sm">Log expenses and stay under budget to earn your first Stash Points!</p>
+                    </div>
                   ) : leaderboard.map((entry) => {
                     const entryPoints = Number(entry.total_points) || 0;
                     const entryBadge = getRankBadge(entryPoints);
                     const name = entry.full_name || "Stash User";
+                    const isCurrentUser = entry.id === user?.id;
+                    const rankMedal = entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : `#${entry.rank}`;
                     return (
-                      <div key={entry.id} className={`flex items-center justify-between gap-4 p-4 transition-colors hover:bg-white/[0.02] ${entry.id === user?.id ? "bg-emerald-500/[0.04]" : ""}`}>
+                      <div key={entry.id} className={`flex items-center justify-between gap-4 p-4 px-6 transition-all hover:bg-white/[0.02] ${isCurrentUser ? "bg-emerald-500/[0.06] border-l-2 border-l-emerald-400" : ""}`}>
                         <div className="flex min-w-0 items-center gap-4">
-                          <div className="w-8 text-center font-black text-emerald-400 text-sm">#{entry.rank}</div>
-                          <div className="h-10 w-10 overflow-hidden rounded-xl border border-white/10 bg-[#0a0e17]">
+                          <div className={`w-8 text-center font-black text-sm ${entry.rank <= 3 ? 'text-lg' : 'text-emerald-400'}`}>{rankMedal}</div>
+                          <div className="h-10 w-10 overflow-hidden rounded-xl border border-white/10 bg-[#0a0e17] flex-shrink-0">
                             {entry.avatar_url ? (
                               <img src={entry.avatar_url} alt="" className="h-full w-full object-cover" />
                             ) : (
-                              <div className="flex h-full w-full items-center justify-center font-black text-emerald-300 bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-sm">S</div>
+                              <div className="flex h-full w-full items-center justify-center font-black text-emerald-300 bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-sm">{name.charAt(0).toUpperCase()}</div>
                             )}
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate font-bold text-white text-sm">{name}</p>
+                            <p className="truncate font-bold text-white text-sm">
+                              {name}{isCurrentUser && <span className="text-emerald-400 text-xs ml-1.5">(You)</span>}
+                            </p>
                             <span className={`badge text-[10px] ${entryBadge.className}`}>
-                              <Shield className="h-2.5 w-2.5" />
-                              {entryBadge.label}
+                              {entryBadge.emoji} {entryBadge.label}
                             </span>
                           </div>
                         </div>
@@ -1107,200 +1275,200 @@ export default function Dashboard() {
 
               {/* Quick-Log Section */}
               {dashboardMode === 'expense' && <>
-              <div>
-                <div className="flex items-center justify-between mb-5">
-                  <h2 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="w-5 h-5 text-emerald-400" /> Quick Log</h2>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-slate-400 font-medium">Backdate:</label>
-                    <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} max={new Date().toISOString().split('T')[0]} className="input-field py-1.5 px-2.5 text-xs w-auto" />
-                    {logDate && <button onClick={() => setLogDate('')} className="text-xs text-red-400 hover:text-red-300"><X className="w-3.5 h-3.5" /></button>}
-                  </div>
-                </div>
-                {logDate && <div className="mb-4 badge badge-blue text-xs"><Calendar className="w-3 h-3" /> Logging for: {new Date(logDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>}
-                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-
-                  {/* Food Card */}
-                  <div className="glass-card p-5">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-lg">🍔</div>
-                      <h3 className="font-semibold text-white text-sm">Food & Dining</h3>
+                <div>
+                  <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="w-5 h-5 text-emerald-400" /> Quick Log</h2>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-slate-400 font-medium">Backdate:</label>
+                      <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} max={new Date().toISOString().split('T')[0]} className="input-field py-1.5 px-2.5 text-xs w-auto" />
+                      {logDate && <button onClick={() => setLogDate('')} className="text-xs text-red-400 hover:text-red-300"><X className="w-3.5 h-3.5" /></button>}
                     </div>
-                    <div className="flex flex-col gap-3">
-                      <div className="relative flex flex-col">
-                        <label htmlFor="foodAmount" className="sr-only">Food Amount</label>
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
-                        <input
-                          id="foodAmount"
-                          type="number"
-                          value={foodAmount}
-                          onChange={(e) => setFoodAmount(e.target.value)}
-                          placeholder="0.00"
-                          className="input-field pl-8"
-                          aria-label="Enter food expense amount"
-                        />
+                  </div>
+                  {logDate && <div className="mb-4 badge badge-blue text-xs"><Calendar className="w-3 h-3" /> Logging for: {new Date(logDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>}
+                  <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+                    {/* Food Card */}
+                    <div className="glass-card p-5">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-lg">🍔</div>
+                        <h3 className="font-semibold text-white text-sm">Food & Dining</h3>
                       </div>
-                      <button
-                        onClick={() => logExpense("Food", foodAmount, setFoodAmount, logDate || undefined)}
-                        className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-semibold py-2.5 rounded-xl transition-all border border-emerald-500/15 text-sm"
-                        aria-label="Log Food Expense"
-                      >
-                        Log Food
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Transport Card */}
-                  <div className="glass-card p-5">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-lg">🚗</div>
-                      <h3 className="font-semibold text-white text-sm">Transport</h3>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      <div className="relative flex flex-col">
-                        <label htmlFor="transportAmount" className="sr-only">Transport Amount</label>
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
-                        <input
-                          id="transportAmount"
-                          type="number"
-                          value={transportAmount}
-                          onChange={(e) => setTransportAmount(e.target.value)}
-                          placeholder="0.00"
-                          className="input-field pl-8"
-                          aria-label="Enter transport expense amount"
-                        />
-                      </div>
-                      <button
-                        onClick={() => logExpense("Transport", transportAmount, setTransportAmount, logDate || undefined)}
-                        className="w-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 font-semibold py-2.5 rounded-xl transition-all border border-blue-500/15 text-sm"
-                        aria-label="Log Transport Expense"
-                      >
-                        Log Transport
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Shopping Card */}
-                  <div className="glass-card p-5">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-lg">🛍️</div>
-                      <h3 className="font-semibold text-white text-sm">Shopping</h3>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      <div className="relative flex flex-col">
-                        <label htmlFor="shoppingAmount" className="sr-only">Shopping Amount</label>
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
-                        <input
-                          id="shoppingAmount"
-                          type="number"
-                          value={shoppingAmount}
-                          onChange={(e) => setShoppingAmount(e.target.value)}
-                          placeholder="0.00"
-                          className="input-field pl-8"
-                          aria-label="Enter shopping expense amount"
-                        />
-                      </div>
-                      <button
-                        onClick={() => logExpense("Shopping", shoppingAmount, setShoppingAmount, logDate || undefined)}
-                        className="w-full bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 font-semibold py-2.5 rounded-xl transition-all border border-purple-500/15 text-sm"
-                        aria-label="Log Shopping Expense"
-                      >
-                        Log Shopping
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Other Card */}
-                  <div className="glass-card p-5">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-xl bg-slate-500/10 flex items-center justify-center text-lg">📦</div>
-                      <h3 className="font-semibold text-white text-sm">Other</h3>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
-                        <input
-                          type="number"
-                          value={otherAmount}
-                          onChange={(e) => setOtherAmount(e.target.value)}
-                          placeholder="0.00"
-                          className="input-field pl-8"
-                        />
-                      </div>
-                      <button
-                        onClick={() => logExpense("Other", otherAmount, setOtherAmount, logDate || undefined)}
-                        className="w-full bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 font-semibold py-2.5 rounded-xl transition-all border border-white/[0.06] text-sm"
-                      >
-                        Log Other
-                      </button>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-
-              {/* Transaction History */}
-              <div className="glass-card-static overflow-hidden">
-                <div className="p-6 border-b border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <Calendar className="w-5 h-5 text-blue-400" />
-                    <h2 className="text-lg font-bold text-white">Transaction History</h2>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <select
-                      value={activeHistoryDate}
-                      onChange={(e) => setSelectedHistoryDate(e.target.value)}
-                      className="input-field py-2 px-3 text-sm w-auto"
-                    >
-                      {uniqueDates.length === 0 && <option value="">No history</option>}
-                      {uniqueDates.map(date => (
-                        <option key={date} value={date}>
-                          {new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {activeHistoryDate && (
-                  <div className="bg-blue-500/[0.04] px-6 py-3 border-b border-white/[0.06] flex justify-between items-center">
-                    <span className="text-slate-400 font-medium text-sm">Daily Total</span>
-                    <span className="text-white font-bold text-lg">{currency}{filteredHistoryTotal.toLocaleString()}</span>
-                  </div>
-                )}
-
-                <div className="divide-y divide-white/[0.04] max-h-[400px] overflow-y-auto">
-                  {filteredHistory.length === 0 ? (
-                    <div className="p-12 text-center">
-                      <p className="text-slate-500 font-medium">No transactions for this date</p>
-                      <p className="text-slate-600 text-sm mt-1">Every big fortune starts with one small stash.</p>
-                    </div>
-                  ) : (
-                    filteredHistory.map((exp) => (
-                      <div key={exp.id} className="p-4 px-6 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${exp.category === 'Food' ? 'bg-emerald-500/10' :
-                            exp.category === 'Transport' ? 'bg-blue-500/10' :
-                              exp.category === 'Shopping' ? 'bg-purple-500/10' :
-                                'bg-slate-500/10'
-                            }`}>
-                            {exp.category === 'Food' && '🍔'}
-                            {exp.category === 'Transport' && '🚗'}
-                            {exp.category === 'Shopping' && '🛍️'}
-                            {exp.category === 'Other' && '📦'}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-white text-sm">{exp.category}</p>
-                            <p className="text-xs text-slate-500">{new Date(exp.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                          </div>
+                      <div className="flex flex-col gap-3">
+                        <div className="relative flex flex-col">
+                          <label htmlFor="foodAmount" className="sr-only">Food Amount</label>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
+                          <input
+                            id="foodAmount"
+                            type="number"
+                            value={foodAmount}
+                            onChange={(e) => setFoodAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="input-field pl-8"
+                            aria-label="Enter food expense amount"
+                          />
                         </div>
-                        <div className="text-white font-bold">
-                          -{currency}{exp.amount.toLocaleString()}
-                        </div>
+                        <button
+                          onClick={() => logExpense("Food", foodAmount, setFoodAmount, logDate || undefined)}
+                          className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-semibold py-2.5 rounded-xl transition-all border border-emerald-500/15 text-sm"
+                          aria-label="Log Food Expense"
+                        >
+                          Log Food
+                        </button>
                       </div>
-                    ))
+                    </div>
+
+                    {/* Transport Card */}
+                    <div className="glass-card p-5">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-lg">🚗</div>
+                        <h3 className="font-semibold text-white text-sm">Transport</h3>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        <div className="relative flex flex-col">
+                          <label htmlFor="transportAmount" className="sr-only">Transport Amount</label>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
+                          <input
+                            id="transportAmount"
+                            type="number"
+                            value={transportAmount}
+                            onChange={(e) => setTransportAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="input-field pl-8"
+                            aria-label="Enter transport expense amount"
+                          />
+                        </div>
+                        <button
+                          onClick={() => logExpense("Transport", transportAmount, setTransportAmount, logDate || undefined)}
+                          className="w-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 font-semibold py-2.5 rounded-xl transition-all border border-blue-500/15 text-sm"
+                          aria-label="Log Transport Expense"
+                        >
+                          Log Transport
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Shopping Card */}
+                    <div className="glass-card p-5">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-lg">🛍️</div>
+                        <h3 className="font-semibold text-white text-sm">Shopping</h3>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        <div className="relative flex flex-col">
+                          <label htmlFor="shoppingAmount" className="sr-only">Shopping Amount</label>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
+                          <input
+                            id="shoppingAmount"
+                            type="number"
+                            value={shoppingAmount}
+                            onChange={(e) => setShoppingAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="input-field pl-8"
+                            aria-label="Enter shopping expense amount"
+                          />
+                        </div>
+                        <button
+                          onClick={() => logExpense("Shopping", shoppingAmount, setShoppingAmount, logDate || undefined)}
+                          className="w-full bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 font-semibold py-2.5 rounded-xl transition-all border border-purple-500/15 text-sm"
+                          aria-label="Log Shopping Expense"
+                        >
+                          Log Shopping
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Other Card */}
+                    <div className="glass-card p-5">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-slate-500/10 flex items-center justify-center text-lg">📦</div>
+                        <h3 className="font-semibold text-white text-sm">Other</h3>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">{currency}</span>
+                          <input
+                            type="number"
+                            value={otherAmount}
+                            onChange={(e) => setOtherAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="input-field pl-8"
+                          />
+                        </div>
+                        <button
+                          onClick={() => logExpense("Other", otherAmount, setOtherAmount, logDate || undefined)}
+                          className="w-full bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 font-semibold py-2.5 rounded-xl transition-all border border-white/[0.06] text-sm"
+                        >
+                          Log Other
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Transaction History */}
+                <div className="glass-card-static overflow-hidden">
+                  <div className="p-6 border-b border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="w-5 h-5 text-blue-400" />
+                      <h2 className="text-lg font-bold text-white">Transaction History</h2>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <select
+                        value={activeHistoryDate}
+                        onChange={(e) => setSelectedHistoryDate(e.target.value)}
+                        className="input-field py-2 px-3 text-sm w-auto"
+                      >
+                        {uniqueDates.length === 0 && <option value="">No history</option>}
+                        {uniqueDates.map(date => (
+                          <option key={date} value={date}>
+                            {new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {activeHistoryDate && (
+                    <div className="bg-blue-500/[0.04] px-6 py-3 border-b border-white/[0.06] flex justify-between items-center">
+                      <span className="text-slate-400 font-medium text-sm">Daily Total</span>
+                      <span className="text-white font-bold text-lg">{currency}{filteredHistoryTotal.toLocaleString()}</span>
+                    </div>
                   )}
+
+                  <div className="divide-y divide-white/[0.04] max-h-[400px] overflow-y-auto">
+                    {filteredHistory.length === 0 ? (
+                      <div className="p-12 text-center">
+                        <p className="text-slate-500 font-medium">No transactions for this date</p>
+                        <p className="text-slate-600 text-sm mt-1">Every big fortune starts with one small stash.</p>
+                      </div>
+                    ) : (
+                      filteredHistory.map((exp) => (
+                        <div key={exp.id} className="p-4 px-6 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${exp.category === 'Food' ? 'bg-emerald-500/10' :
+                              exp.category === 'Transport' ? 'bg-blue-500/10' :
+                                exp.category === 'Shopping' ? 'bg-purple-500/10' :
+                                  'bg-slate-500/10'
+                              }`}>
+                              {exp.category === 'Food' && '🍔'}
+                              {exp.category === 'Transport' && '🚗'}
+                              {exp.category === 'Shopping' && '🛍️'}
+                              {exp.category === 'Other' && '📦'}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-white text-sm">{exp.category}</p>
+                              <p className="text-xs text-slate-500">{new Date(exp.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            </div>
+                          </div>
+                          <div className="text-white font-bold">
+                            -{currency}{exp.amount.toLocaleString()}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
               </> /* end expense mode */}
 
               {/* Savings Mode */}
