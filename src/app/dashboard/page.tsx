@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, Coffee, Car, ShoppingBag, Settings, LayoutDashboard, Clock, Save, Target, Box, Wallet, User, MapPin, AlertTriangle, Navigation, Calendar } from "lucide-react";
+import { LogOut, Coffee, Car, ShoppingBag, Settings, LayoutDashboard, Clock, Save, Target, Box, Wallet, User, MapPin, AlertTriangle, Navigation, Calendar, Flame } from "lucide-react";
 
 interface Expense {
   id: string;
@@ -127,6 +127,31 @@ export default function Dashboard() {
   const logExpense = async (category: string, amountStr: string, setter: (val: string) => void) => {
     const amount = Number(amountStr);
     if (!amount || amount <= 0 || !user) return;
+
+    // Gamification: Streak Logic
+    const now = new Date();
+    const todayStr = new Date(now.getTime() - (12 * 60 * 60 * 1000)).toISOString().split('T')[0];
+    const lastLogged = user.user_metadata?.last_logged_date;
+    let currentStreak = Number(user.user_metadata?.streak_count) || 0;
+    
+    if (lastLogged !== todayStr) {
+      if (lastLogged) {
+        const lastDate = new Date(lastLogged);
+        const diffDays = Math.round((new Date(todayStr).getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays <= 1) {
+          currentStreak += 1;
+        } else {
+          currentStreak = 1;
+        }
+      } else {
+        currentStreak = 1;
+      }
+      
+      const { data: updateData } = await supabase.auth.updateUser({
+        data: { streak_count: currentStreak, last_logged_date: todayStr }
+      });
+      if (updateData?.user) setUser(updateData.user);
+    }
 
     const newExpense = {
       user_id: user.id,
@@ -284,9 +309,27 @@ export default function Dashboard() {
   const flag = user?.user_metadata?.flag || "";
   const avatarUrl = user?.user_metadata?.avatar_url;
   const hezZones = user?.user_metadata?.hez_zones || [];
+  const streakCount = user?.user_metadata?.streak_count || 0;
 
   if (loading) {
-    return <div className="min-h-screen bg-[#0d1117] flex items-center justify-center text-white font-sans">Loading Stash...</div>;
+    return (
+      <div className="min-h-screen bg-[#0d1117] px-6 py-12 flex flex-col items-center">
+        <div className="max-w-6xl w-full animate-pulse">
+          <div className="h-10 w-48 bg-gray-800 rounded mb-4"></div>
+          <div className="h-6 w-64 bg-gray-800 rounded mb-12"></div>
+          
+          <div className="h-48 w-full bg-gray-800 rounded-3xl mb-8"></div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+             <div className="h-48 bg-gray-800 rounded-3xl"></div>
+             <div className="h-48 bg-gray-800 rounded-3xl"></div>
+             <div className="h-48 bg-gray-800 rounded-3xl"></div>
+          </div>
+          
+          <div className="h-64 w-full bg-gray-800 rounded-3xl"></div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -333,14 +376,22 @@ export default function Dashboard() {
               Track your expenses and grow your Stash Points.
             </p>
           </div>
-          <div className="relative group">
-            <input 
-              type="file" 
-              accept="image/*" 
-              className="absolute inset-0 opacity-0 cursor-pointer z-10"
-              onChange={handleAvatarUpload}
-              title="Change Profile Picture"
-            />
+          <div className="flex items-center gap-4">
+            {streakCount > 0 && (
+              <div className="hidden sm:flex items-center gap-1.5 bg-orange-500/10 border border-orange-500/20 text-orange-500 px-4 py-1.5 rounded-full font-bold shadow-[0_0_15px_rgba(249,115,22,0.2)]" aria-label={`Current streak: ${streakCount} days`}>
+                <Flame className="w-5 h-5 fill-orange-500" />
+                <span>{streakCount} <span className="text-sm opacity-80">Day Streak</span></span>
+              </div>
+            )}
+            <div className="relative group">
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                onChange={handleAvatarUpload}
+                title="Change Profile Picture"
+                aria-label="Upload Profile Picture"
+              />
             <div className="w-20 h-20 rounded-full bg-gray-800 border-2 border-gray-700 flex items-center justify-center overflow-hidden group-hover:border-blue-500 transition-colors shadow-lg">
               {avatarUrl ? (
                 <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
@@ -448,10 +499,10 @@ export default function Dashboard() {
                     <p className="text-sm text-gray-500">Active High Expense Zones</p>
                   </div>
                   <div className="mt-4 flex flex-col gap-2 relative z-10">
-                    <Link href="/map" className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-500 py-2 rounded-lg text-center text-sm font-medium transition-colors border border-red-500/20 flex items-center justify-center gap-2">
+                    <Link href="/map" aria-label="Open Tactical Map page" className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-500 py-2 rounded-lg text-center text-sm font-medium transition-colors border border-red-500/20 flex items-center justify-center gap-2">
                       <MapPin className="w-4 h-4" /> Open Tactical Map
                     </Link>
-                    <button onClick={markCurrentLocationAsHEZ} className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded-lg text-center text-sm font-medium transition-colors border border-gray-700 flex items-center justify-center gap-2">
+                    <button onClick={markCurrentLocationAsHEZ} aria-label="Mark current GPS location as High Expense Zone" className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded-lg text-center text-sm font-medium transition-colors border border-gray-700 flex items-center justify-center gap-2">
                       <Navigation className="w-4 h-4" /> Mark Current Loc
                     </button>
                   </div>
@@ -473,19 +524,23 @@ export default function Dashboard() {
                       <h3 className="font-semibold text-white">Food & Dining</h3>
                     </div>
                     <div className="flex flex-col gap-3">
-                      <div className="relative">
+                      <div className="relative flex flex-col">
+                        <label htmlFor="foodAmount" className="sr-only">Food Amount</label>
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">{currency}</span>
                         <input 
+                          id="foodAmount"
                           type="number" 
                           value={foodAmount}
                           onChange={(e) => setFoodAmount(e.target.value)}
                           placeholder="0.00"
                           className="w-full bg-[#0d1117] border border-gray-800 rounded-xl py-3 pl-8 pr-3 text-white focus:outline-none focus:border-green-500"
+                          aria-label="Enter food expense amount"
                         />
                       </div>
                       <button 
                         onClick={() => logExpense("Food", foodAmount, setFoodAmount)}
                         className="w-full bg-green-600/20 hover:bg-green-600 text-green-500 hover:text-white font-medium py-3 rounded-xl transition-colors border border-green-500/30"
+                        aria-label="Log Food Expense"
                       >
                         Log Food
                       </button>
@@ -501,19 +556,23 @@ export default function Dashboard() {
                       <h3 className="font-semibold text-white">Transport</h3>
                     </div>
                     <div className="flex flex-col gap-3">
-                      <div className="relative">
+                      <div className="relative flex flex-col">
+                        <label htmlFor="transportAmount" className="sr-only">Transport Amount</label>
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">{currency}</span>
                         <input 
+                          id="transportAmount"
                           type="number" 
                           value={transportAmount}
                           onChange={(e) => setTransportAmount(e.target.value)}
                           placeholder="0.00"
                           className="w-full bg-[#0d1117] border border-gray-800 rounded-xl py-3 pl-8 pr-3 text-white focus:outline-none focus:border-blue-500"
+                          aria-label="Enter transport expense amount"
                         />
                       </div>
                       <button 
                         onClick={() => logExpense("Transport", transportAmount, setTransportAmount)}
                         className="w-full bg-blue-600/20 hover:bg-blue-600 text-blue-500 hover:text-white font-medium py-3 rounded-xl transition-colors border border-blue-500/30"
+                        aria-label="Log Transport Expense"
                       >
                         Log Transport
                       </button>
@@ -529,19 +588,23 @@ export default function Dashboard() {
                       <h3 className="font-semibold text-white">Shopping</h3>
                     </div>
                     <div className="flex flex-col gap-3">
-                      <div className="relative">
+                      <div className="relative flex flex-col">
+                        <label htmlFor="shoppingAmount" className="sr-only">Shopping Amount</label>
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">{currency}</span>
                         <input 
+                          id="shoppingAmount"
                           type="number" 
                           value={shoppingAmount}
                           onChange={(e) => setShoppingAmount(e.target.value)}
                           placeholder="0.00"
                           className="w-full bg-[#0d1117] border border-gray-800 rounded-xl py-3 pl-8 pr-3 text-white focus:outline-none focus:border-purple-500"
+                          aria-label="Enter shopping expense amount"
                         />
                       </div>
                       <button 
                         onClick={() => logExpense("Shopping", shoppingAmount, setShoppingAmount)}
                         className="w-full bg-purple-600/20 hover:bg-purple-600 text-purple-500 hover:text-white font-medium py-3 rounded-xl transition-colors border border-purple-500/30"
+                        aria-label="Log Shopping Expense"
                       >
                         Log Shopping
                       </button>

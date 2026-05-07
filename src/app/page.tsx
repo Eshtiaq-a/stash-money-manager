@@ -5,8 +5,32 @@ import { Wallet, Shield, PieChart, Target, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 export default function LandingPage() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "name": "Stash",
+        "url": "https://stash-saver.vercel.app",
+        "logo": "https://stash-saver.vercel.app/icon.png"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "Stash",
+        "applicationCategory": "FinanceApplication",
+        "operatingSystem": "Any",
+        "description": "Tactical financial awareness for students.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0"
+        }
+      }
+    ]
+  };
+
   return (
     <div className="min-h-screen bg-[#0d1117] text-gray-200 font-sans selection:bg-blue-500/30">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       {/* Navigation */}
       <nav className="w-full px-6 py-4 border-b border-gray-800 bg-[#0d1117]/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">

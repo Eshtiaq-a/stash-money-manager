@@ -8,7 +8,10 @@ const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space
 import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
-  title: "Stash | Smart Student Budgeting",
+  title: {
+    template: "%s | Stash",
+    default: "Stash | Smart Student Budgeting",
+  },
   description: "Tactical financial awareness for students.",
 };
 

@@ -82,11 +82,14 @@ export default function Footer() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div className="bg-[#161b22] border border-gray-800 p-6 rounded-2xl w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-4">Send Feedback</h2>
+            <label htmlFor="feedbackMessage" className="sr-only">Feedback Message</label>
             <textarea
+              id="feedbackMessage"
               className="w-full bg-[#0d1117] border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500 min-h-[120px] resize-none mb-4"
               placeholder="Tell us what's on your mind or report a bug..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              aria-label="Feedback message"
             />
             <div className="flex gap-3 justify-end">
               <button 
