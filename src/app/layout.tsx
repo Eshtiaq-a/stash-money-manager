@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { Viewport } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -74,6 +75,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col font-sans bg-[#0a0e17] text-[#f1f5f9]">
         {children}
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
