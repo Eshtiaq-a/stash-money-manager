@@ -9,15 +9,15 @@ const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space
 import Footer from "@/components/Footer";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://stash-saver.vercel.app";
-const appName = "Stash";
-const appDescription = "Tactical financial awareness for students.";
+const appName = "Stash Saver";
+const appDescription = "Your Gen-Z personal finance companion. Save smarter, spend wiser, and turn small savings into big wins.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   applicationName: appName,
   title: {
-    template: "%s | Stash",
-    default: "Stash | Smart Student Budgeting",
+    template: "%s | Stash Saver",
+    default: "Stash Saver — Save Smarter. Spend Wiser.",
   },
   description: appDescription,
   manifest: "/manifest.webmanifest",
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: appName,
-    title: "Stash | Smart Student Budgeting",
+    title: "Stash Saver — Your Money Deserves Better Habits",
     description: appDescription,
     url: siteUrl,
     images: [
@@ -40,13 +40,13 @@ export const metadata: Metadata = {
         url: "/stash-icon.svg",
         width: 512,
         height: 512,
-        alt: "Stash app icon",
+        alt: "Stash Saver app icon",
       },
     ],
   },
   twitter: {
     card: "summary",
-    title: "Stash | Smart Student Budgeting",
+    title: "Stash Saver — Save Smarter. Spend Wiser.",
     description: appDescription,
     images: ["/stash-icon.svg"],
   },
@@ -61,7 +61,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#16a34a",
+  themeColor: "#0a0e17",
 };
 
 export default function RootLayout({
@@ -71,7 +71,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased dark`}>
-      <body className="min-h-full flex flex-col font-sans bg-[#0d1117] text-[#e0e0f8]">
+      <body className="min-h-full flex flex-col font-sans bg-[#0a0e17] text-[#f1f5f9]">
         {children}
         <Footer />
       </body>
